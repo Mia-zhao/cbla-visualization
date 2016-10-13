@@ -1,25 +1,12 @@
-# GUI
 import sys
-import time
 
-import math
-import random
 import numpy as np
-
 import collections
-from enum import Enum
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
+
 import pyqtgraph as pg
-
-from cbla_learner import Learner
-import simpleTeensyComs
-
-BUFFER_SIZE = 100
-DATA = collections.deque([0.0]*BUFFER_SIZE, BUFFER_SIZE)
-X = np.linspace(0, 10.0, BUFFER_SIZE)
-Y = np.zeros(BUFFER_SIZE, dtype=np.float)
 
 APP_TITLE = "CBLA Visualization"
 
@@ -37,47 +24,36 @@ MENU_ITEMS = [
     (MENU_CBLA, [])]
 
 MESSAGE_READY = "Ready"
+MESSAGE_RUN = "Running"
+MESSAGE_FINISH = "Finished"
 
 FONT_ARIAL = "Arial"
 FONT_SIZE_TITLE = 12
 FONT_SIZE_CONFIG = 11
+FONT_SIZE_SUBTITLE = 11
 
-State = Enum('State', 'ready running finshed')
-
-numActs = 0
-ActsList = []
-numSens = 0
-SensList = []
-sensValues = []
-actValues = []
-teensyComms = None
-destination = None 
-origin = None
-
-curve = None
+MAX_SENSOR_DATA_NUM = 100
+INIT_ACTUATOR_VAL = 30
 
 class VisualApp(QMainWindow):
     def __init__(self):
-        super(QMainWindow, self).__init__()
-
-        self.central_widget = QWidget()
-
+        super(VisualApp, self).__init__()
         self.initUI()
 
     def initUI(self):
+        self.central_widget = QWidget()
         self.central_layout = QGridLayout()
         
-        self.topleft = self.menu_frame()
-        self.topright = StackedContent()
+        self.topleft = Configuration(self)
+        self.topright = SensorActuator(self)
         
-        splitter1 = QSplitter(Qt.Horizontal)
+        splitter1 = QSplitter(Qt.Horizontal, parent=self)
         splitter1.addWidget(self.topleft)
         splitter1.addWidget(self.topright)
-        splitter1.setStretchFactor(1, 10)
         
-        self.bottom = BottomFrame(self)
+        self.bottom = Bottom(self)
         
-        splitter2 = QSplitter(Qt.Vertical)
+        splitter2 = QSplitter(Qt.Vertical, parent=self)
         splitter2.addWidget(splitter1)
         splitter2.addWidget(self.bottom)
         splitter2.setStretchFactor(0, 5)
@@ -89,60 +65,13 @@ class VisualApp(QMainWindow):
         
         self.statusBar().showMessage(MESSAGE_READY)
         
-        self.setGeometry(100, 100, 1500, 900)
         self.setWindowTitle(APP_TITLE)
-        self.show()
-
-    def menu_frame(self):
-        self.menu_frame = QFrame()
-        self.init_menu()
-        return self.menu_frame
-
-    def init_menu(self):
-        #self.setFrameShape(QFrame.StyledPanel)
-        self.menu_frame.layout = QVBoxLayout()
-    
-        self.menu_frame.filter = QLineEdit('Type Key Word')
         
-        self.menu_frame.menu_tree = QTreeView()
-        
-        self.menu_frame.menu_model = QStandardItemModel()
-        self.menu_frame.menu_model.setHorizontalHeaderLabels([self.menu_frame.tr(MENU_HEADER)])
-        self.addMenuItems(self.menu_frame.menu_model, MENU_ITEMS)
-        self.menu_frame.menu_tree.setModel(self.menu_frame.menu_model)
-        
-        self.menu_frame.menu_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.menu_frame.menu_tree.connect(self.menu_frame.menu_tree, SIGNAL('clicked(QModelIndex)'), self.openMenu)
+        self.setAttribute(Qt.WA_DeleteOnClose)
 
-        self.menu_frame.layout.addWidget(self.menu_frame.filter)
-        self.menu_frame.layout.addWidget(self.menu_frame.menu_tree)
-        self.menu_frame.setLayout(self.menu_frame.layout)
-
-    def addMenuItems(self, parent, items):
-        for name, children in items:
-            item = QStandardItem(name)
-            parent.appendRow(item)
-            if children:
-                self.addMenuItems(item, children)
-
-    def openMenu(self, position):
-        indexes = self.menu_frame.menu_tree.selectedIndexes()
-        if (len(indexes) > 0):
-            index = indexes[0]
-            if (index.data() == MENU_CONFIG):
-                self.topright.setCurrentIndex(0)
-            elif (index.data() == MENU_SENS_ACT):
-                self.topright.setCurrentIndex(1)
-            elif (index.data() == MENU_SENS):
-                self.topright.setCurrentIndex(2)
-            elif (index.data() == MENU_ACT):
-                self.topright.setCurrentIndex(3)
-            elif (index.data() == MENU_CBLA):
-                self.topright.setCurrentIndex(4)
-            
-class StackedContent(QStackedWidget):
-    def __init__(self):
-        super(QStackedWidget, self).__init__()
+class Configuration(QWidget):
+    def __init__(self, parent=None):
+        super(Configuration, self).__init__(parent)
         self.config = {
             "exploring_rate": 0.1,
             "exploring_rate_range": (0.4, 0.01),
@@ -162,29 +91,16 @@ class StackedContent(QStackedWidget):
             "kga_tau": 30,
             "max_training_data_num": 500
         }
-        self.init()
+        self.init_config_widget()
 
-    def init(self):
-        #content.setFrameShape(QFrame.StyledPanel)
-        self.cbla = self.get_frame(MENU_CBLA)
-        
-        self.addWidget(self.config_frame())
-        self.addWidget(self.get_frame(MENU_SENS_ACT))
-        self.addWidget(self.get_frame(MENU_SENS))
-        self.addWidget(self.get_frame(MENU_ACT))
-        self.addWidget(self.cbla)
-
-    def config_frame(self):
-        frame = QWidget()
+    def init_config_widget(self):
         layout = QFormLayout()
         
-        title = QLabel()
-        title.setText(MENU_CONFIG)
+        title = QLabel(MENU_CONFIG)
         title.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE, QFont.Bold))
         
-        learner_label = QLabel()
-        learner_label.setText("Learner Configuration")
-        learner_label.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE - 1, QFont.Bold))
+        label_learner = QLabel("Learner Configuration")
+        label_learner.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
         
         exploring_rate = QLineEdit('0.3')
         exploring_rate.setValidator(QDoubleValidator())
@@ -198,13 +114,14 @@ class StackedContent(QStackedWidget):
         
         self.exploring_rate_range = QLineEdit('(0.4, 0.01)')
         self.exploring_rate_range.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
+        self.exploring_rate_range.textEdited.connect(self.exploring_rate_range_changed)
         
         self.exploring_reward_range = QLineEdit('(-0.03, 0.004)')
         self.exploring_reward_range.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
+        self.exploring_reward_range.textEdited.connect(self.exploring_reward_range_changed)
         
-        expert_label = QLabel()
-        expert_label.setText("Expert Configuration")
-        expert_label.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE - 1, QFont.Bold))
+        label_expert = QLabel("Expert Configuration")
+        label_expert.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
         
         reward_smoothing = QLineEdit('1')
         reward_smoothing.setValidator(QDoubleValidator())
@@ -276,13 +193,13 @@ class StackedContent(QStackedWidget):
         
         layout.addRow(title)
         
-        layout.addRow(learner_label)
+        layout.addRow(label_learner)
         layout.addRow("Exploring Rate", exploring_rate)
         layout.addRow(self.adapt_exploring_rate)
         layout.addRow("Exploring Rate Range", self.exploring_rate_range)
         layout.addRow("Exploring Reward Range", self.exploring_reward_range)
         
-        layout.addRow(expert_label)
+        layout.addRow(label_expert)
         layout.addRow("Reward Smoothing", reward_smoothing)
         layout.addRow("Split Threshold", split_threshold)
         layout.addRow("split Threshold Growth Rate", split_threshold_growth_rate)
@@ -296,11 +213,8 @@ class StackedContent(QStackedWidget):
         layout.addRow("KGA Delta", kga_delta)
         layout.addRow("KGA TAU", kga_tau)
         layout.addRow("Max Training Data Num", max_training_data_num)
-        #config_ex_range.setEnabled(self.adapt_exploring_rate)
-        #config_reward_range.setEnabled(self.adapt_exploring_rate)
         
-        frame.setLayout(layout)
-        return frame
+        self.setLayout(layout)
 
     def adapt_exploring_rate_changed(self, checkbox):
         isAdapt = checkbox.isChecked()
@@ -308,6 +222,20 @@ class StackedContent(QStackedWidget):
         self.exploring_reward_range.setEnabled(isAdapt)
         
         self.config["adapt_exploring_rate"] = isAdapt
+
+    def exploring_rate_range_changed(self, val):
+        valRange = val.replace("(").replace(")").split(",")
+        if (len(valRange) > 1):
+            minVal = float(valRange[0].replace(" ", ""))
+            maxVal = float(valRange[1].replace(" ", ""))
+            self.config["exploring_rate_range"] = (minVal, maxVal)
+
+    def exploring_reward_range_changed(self, val):
+        valRange = val.replace("(").replace(")").split(",")
+        if (len(valRange) > 1):
+            minVal = float(valRange[0].replace(" ", ""))
+            maxVal = float(valRange[1].replace(" ", ""))
+            self.config["exploring_reward_range"] = (minVal, maxVal)
 
     def exploring_rate_changed(self, val):
         self.config["exploring_rate"] = val
@@ -351,28 +279,155 @@ class StackedContent(QStackedWidget):
     def max_training_data_num_changed(self, val):
         self.config["max_training_data_num"] = val
 
-    def get_frame(self, name):
-        frame = QWidget()
+class SensorActuator(QWidget):
+    def __init__(self, parent=None):
+        super(SensorActuator, self).__init__(parent)
+        self.init_sensor_actuator_widget()
+
+    def init_sensor_actuator_widget(self):
         layout = QFormLayout()
         
-        title = QLabel()
-        title.setText(name)
-        title.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE, QFont.Bold))
+        label_sens_act = QLabel("Sensors and Actuators")
+        label_sens_act.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE, QFont.Bold))
         
-        layout.addRow(title)
-        frame.setLayout(layout)
-        return frame
+        tab_widget = QTabWidget(self)
+        
+        tab_physical = QWidget(tab_widget)
+        tab_virtual = VirtualBehavior(tab_widget)
+        
+        tab_widget.addTab(tab_physical, "Physical")
+        tab_widget.addTab(tab_virtual, "Virtual")
+        
+        self.init_physical_tab(tab_physical)
+        self.init_virtual_tab(tab_virtual)
+        
+        layout.addRow(label_sens_act)
+        layout.addRow(tab_widget)
+        
+        self.setLayout(layout)
 
+    def init_physical_tab(self, widget):
+        layout = QGridLayout()
+        
+        sensor = Sensor(0, 0, 5, widget)
+        act1 = Actuator(0, 0, 1, widget)
+        act2 = Actuator(0, 0, 2, widget)
+        act3 = Actuator(0, 0, 3, widget)
+        act4 = Actuator(0, 0, 4, widget)
+        
+        layout.addWidget(sensor, 0, 0, 1, 4)
+        layout.addWidget(act1, 1, 0)
+        layout.addWidget(act2, 1, 2)
+        layout.addWidget(act3, 1, 3)
+        layout.addWidget(act4, 1, 4)
+        
+        widget.setLayout(layout)
 
-class BottomFrame(QFrame):
-    def __init__(self, VisualApp):
-        super(QFrame, self).__init__()
-        self.status = State.ready
-        self.app = VisualApp
+    def init_virtual_tab(self, widget):
+        pass
+
+class VirtualBehavior(QWidget):
+    def __init__(self, parent=None):
+        super(VirtualBehavior, self).__init__(parent)
+        pass
+
+class Sensor(QWidget):
+    def __init__(self, node, port, addr, parent=None):
+        super(Sensor, self).__init__(parent)
+        
+        self.node = node
+        self.port = port
+        self.addr = addr
+        
+        self.curve = None
+        self.x = np.linspace(0.0, 10.0, MAX_SENSOR_DATA_NUM)
+        self.y = np.zeros(MAX_SENSOR_DATA_NUM, dtype=np.float)
+        self.data = collections.deque([0.0]*MAX_SENSOR_DATA_NUM, MAX_SENSOR_DATA_NUM)
+        
+        self.init_sensor_widget()
+
+    def init_sensor_widget(self):
+        layout = QGridLayout()
+        
+        label_node = QLabel("Node: {}".format(self.node))
+        label_node.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        label_port = QLabel("Port: {}".format(self.port))
+        label_port.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        label_addr = QLabel("Address: {}".format(self.addr))
+        label_addr.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        plot = pg.PlotWidget(title="Sensor Reading")
+        
+        plot.setLabel("bottom", text="Sample")
+        plot.setLabel("left", text="Sensor Value")
+        plot.setXRange(0, 10)
+        plot.setYRange(0, 5000)
+        
+        plot.showGrid(x=True, y=True)
+        
+        self.curve = plot.plot(self.x, self.y, pen=(255,0,0))
+        
+        layout.addWidget(label_node, 0, 0)
+        layout.addWidget(label_port, 0, 1)
+        layout.addWidget(label_addr, 0, 2)
+        layout.addWidget(plot, 1, 0, 1, 3)
+        
+        #self.setStyleSheet('Sensor{border: 2px solid black;}')
+        
+        self.setLayout(layout)
+
+class Actuator(QWidget):
+    def __init__(self, node, port, addr, parent = None):
+        super(Actuator, self).__init__(parent)
+        
+        self.node = node
+        self.port = port
+        self.addr = addr
+        
+        self.init_actuator_widget()
+
+    def init_actuator_widget(self):
+        layout = QGridLayout()
+        
+        label_node = QLabel("Node: {}".format(self.node))
+        label_node.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        label_port = QLabel("Port: {}".format(self.port))
+        label_port.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        label_addr = QLabel("Address: {}".format(self.addr))
+        label_addr.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        self.label_value = QLabel("{}".format(INIT_ACTUATOR_VAL))
+        self.label_value.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(255)
+        self.slider.setValue(INIT_ACTUATOR_VAL)
+        self.slider.setTickPosition(QSlider.TicksBelow)
+        self.slider.valueChanged.connect(self.slider_value_changed)
+        self.slider.setTickInterval(5)
+        
+        layout.addWidget(label_node, 0, 0)
+        layout.addWidget(label_port, 0, 1)
+        layout.addWidget(label_addr, 0, 2)
+        layout.addWidget(self.label_value, 1, 0)
+        layout.addWidget(self.slider, 1, 1, 1, 3)
+        
+        self.setLayout(layout)
+
+    def slider_value_changed(self):
+        self.label_value.setText("{}".format(self.slider.value()))
+
+class Bottom(QWidget):
+    def __init__(self, parent=None):
+        super(Bottom, self).__init__(parent)
         self.initUI()
 
     def initUI(self):
-        #self.setFrameShape(QFrame.StyledPanel)
         self.layout = QVBoxLayout()
         
         self.log = QTextEdit()
@@ -383,7 +438,7 @@ class BottomFrame(QFrame):
         self.btn_run.clicked.connect(self.run)
         
         self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.clicked.connect(QCoreApplication.instance().quit)
+        self.btn_cancel.clicked.connect(self.cancel)
         
         btn_layout.addStretch(1)
         btn_layout.addWidget(self.btn_run)
@@ -395,154 +450,7 @@ class BottomFrame(QFrame):
         self.setLayout(self.layout)
 
     def run(self):
-        self.status = State.running
-        self.log.setText("Running CBLA")
-        execute_CBLA(self.app.topright.config, self.app)
-        self.log.setText("Finished CBLA")
-        
-def execute_CBLA(config, app):
-    new_plot = pg.PlotWidget(title="Learning Progress")
-        
-    new_plot.setLabel("bottom", text="Sample")
-    new_plot.setLabel("left", text="Mean Error")
-    #new_plot.setXRange(-10, 0)
-    new_plot.setXRange(0, BUFFER_SIZE/10)
-    new_plot.setYRange(-2, 5)
-    
-    new_plot.showGrid(x=True, y=True)
-    #global curve
-    curve = new_plot.plot(X, Y, pen=(255,0,0))
-    
-    cbla_layout = app.topright.cbla.layout()
-    cbla_layout.addRow(new_plot)
-    #new_plot.show()
-    
-    lrnr = Learner(tuple([0]*numSens),tuple([0]*numActs), 
-        exploring_rate = config["exploring_rate"],
-        exploring_rate_range = config["exploring_rate_range"],
-        exploring_reward_range = config["exploring_reward_range"],
-        adapt_exploring_rate = config["adapt_exploring_rate"],
-        reward_smoothing = config["reward_smoothing"],
-        split_threshold = config["split_threshold"],
-         split_threshold_growth_rate = config["split_threshold_growth_rate"],
-        split_lock_count_threshold = config["split_lock_count_threshold"],
-        split_quality_threshold = config["split_quality_threshold"],
-        split_quality_decay = config["split_quality_decay"],
-        mean_error_threshold = config["mean_error_threshold"],
-        mean_error = config["mean_error"],
-        action_value = config["action_value"],
-        learning_rate = config["learning_rate"],
-        kga_delta = config["kga_delta"],
-        kga_tau = config["kga_tau"],
-        max_training_data_num = config["max_training_data_num"]
-    )
-    
-    iterNum = 0
-    actionValHist = []
-    global numActs, numSens, SensList, sensValues, ActsList, actValues, teensyComms, destination, origin
-    while iterNum < 50:
+        pass
 
-
-        # Act:  Update all the active actuators (do not act on the very first iteration,
-        # until the sensors have been read
-        if iterNum > 0:
-            for i in range(0,len(ActsList)):
-                simpleTeensyComs.Fade(teensyComms, destination, origin,ActsList[i].genByteStr(),
-                                      int(actValues[i]),0)
-                #print('Command Actuator ', i, 'to Value ', int(actValues[i]))
-
-        #Sense:  Read all the sensors
-        for i in range(0,len(SensList)):
-            sensValues[i] = simpleTeensyComs.Read(teensyComms, destination,
-                                                  origin,SensList[i].genByteStr(), 0)
-            #print('Sensor ', i, 'Reads a Value of ',sensValues[i])
-
-        #Learn:
-        lrnr.learn(tuple(normalize_sens(sensValues,SensList)),tuple(actValues))
-
-        #Select Next action to perform
-        actValues = lrnr.select_action()
-
-        numExperts = lrnr.expert.get_num_experts()
-        #print("-------------------------------------------")
-        #print("Reduced Mean Error " + str(lrnr.expert.rewards_history))
-        #if iterNum == 10:
-         #  Plots.PlotModel(list(lrnr.expert.training_data),
-         #                  list(lrnr.expert.training_label),
-          #                 lrnr.expert.predict_model.predict(list(lrnr.expert.training_data)))
-
-        if numExperts > 1:
-            print('Increased number of experts')
-        #Report the action value and the number of experts currently in the system
-        #print('Current max action value is ', lrnr.expert.get_largest_action_value())
-        #print('Current number of experts is', lrnr.expert.get_num_experts())
-        
-        info = collections.defaultdict(dict)
-        lrnr.expert.save_expert_info(info)
-        DATA.append(info['mean_errors'][numExperts - 1])
-        
-        iterNum += 1
-
-def normalize_sens(sensValues,SensList):
-    normValues = []
-    for i in range(0,len(SensList)):
-        #for now, scale everything the same, this function can be extended to scale
-        #separately based on the device type in the sensors list
-        normValues.append(sensValues[i]/1023)
-
-    return normValues
-
-def update():
-    Y[:] = DATA
-    if(curve is not None):
-        curve.setData(X, Y)
-    
-def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('teensy_comport', type=str, help='The Teensy com port.')
-    parser.add_argument('teensy_serial', type=int, help='The Teensy serial number - usually 6-7 digits.')
-    parser.add_argument('comp_serial', type=int, help='The computers serial number for the purposes of simulation [22222]',
-                       default=simpleTeensyComs.cbla_pc_id, nargs='?' )
-    parser.add_argument('grasshopper_serial', type=int, help='The Grasshopper nodes serial number for the purposes of simulation [33333]',
-                       default=simpleTeensyComs.udp_node_id, nargs='?' )
-
-    args = parser.parse_args()
-
-    global numActs, numSens, SensList, sensValues, ActsList, actValues, teensyComms, destination, origin
-    #Initialize Comms
-    # Initialize Comms and setup the teensy
-    destination = args.teensy_serial #simpleTeensyComs.teensy_sernum
-    origin = args.comp_serial
-    Grasshopper = args.grasshopper_serial
-    teensyComms = simpleTeensyComs.initializeComms(args.teensy_comport)
-    
-    numDevices = simpleTeensyComs.QueryNumDevices(teensyComms, destination, origin)
-    print('The teensy has', numDevices, 'devices')
-    devList = simpleTeensyComs.QueryIDs(teensyComms, destination, origin)
-    
-    
-    for i in range(0,len(devList)):
-        print(devList[i].pr())
-        if devList[i].type%2 == 0:
-            numSens += 1
-            SensList.append(devList[i])
-            sensValues.append(0)
-        else:
-            numActs += 1
-            ActsList.append(devList[i])
-            actValues.append(0)
-    
-    app = QApplication(sys.argv)
-    w = VisualApp()
-
-    timer = QTimer()
-    timer.timeout.connect(update)
-    timer.start(20)
-    
-    
-    sys.exit(app.exec_())
-    
-if __name__ == '__main__':
-    main()
+    def cancel(self):
+        pass
