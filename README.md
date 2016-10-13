@@ -7,6 +7,5 @@ PyQt4
 TKinter
 
 ## GUI Example
-![alt tag](https://github.com/Mia-zhao/visualization/blob/master/img_act_sens.PNG)
 ![alt tag](https://github.com/Mia-zhao/visualization/blob/master/img_visual_tool.PNG)
-
+![alt tag](https://github.com/Mia-zhao/visualization/blob/master/img_visual_plot.PNG)
