@@ -93,7 +93,9 @@ class Configuration(QWidget):
             "kga_delta": 10,
             "kga_tau": 30,
             "max_training_data_num": 500,
-            "cycle_time": 0.8
+            "cycle_time": 0.8,
+            "serial_number": 141960,
+            "COM port": 'COM 7'
         }
         self.init_config_widget()
 
@@ -102,6 +104,17 @@ class Configuration(QWidget):
         
         title = QLabel(MENU_CONFIG)
         title.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE, QFont.Bold))
+        
+        label_connection = QLabel("Connection")
+        label_connection.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        com_port = QLineEdit('COM 7')
+        com_port.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
+        com_port.textEdited.connect(self.com_port_changed)
+        
+        serial_number = QLineEdit('141960')
+        serial_number.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
+        serial_number.textEdited.connect(self.serial_number_changed)
         
         label_learner = QLabel("Learner Configuration")
         label_learner.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
@@ -205,6 +218,10 @@ class Configuration(QWidget):
         
         layout.addRow(title)
         
+        layout.addRow(label_connection)
+        layout.addRow("COM Port", com_port)
+        layout.addRow("Teensy Serial Number", serial_number)
+        
         layout.addRow(label_learner)
         layout.addRow("Exploring Rate", exploring_rate)
         layout.addRow(self.adapt_exploring_rate)
@@ -230,6 +247,12 @@ class Configuration(QWidget):
         layout.addRow("Cycle Time", cycle_time)
         
         self.setLayout(layout)
+
+    def com_port_changed(self, val):
+        self.config["com_port"] = val
+
+    def serial_number_changed(self, val):
+        self.config["serial_number"] = val
 
     def adapt_exploring_rate_changed(self, checkbox):
         isAdapt = checkbox.isChecked()
