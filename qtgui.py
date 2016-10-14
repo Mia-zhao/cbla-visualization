@@ -95,7 +95,7 @@ class Configuration(QWidget):
             "max_training_data_num": 500,
             "cycle_time": 0.8,
             "serial_number": 141960,
-            "COM port": 'COM 7'
+            "com_port": 'COM 7'
         }
         self.init_config_widget()
 
