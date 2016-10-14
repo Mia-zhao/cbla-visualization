@@ -5,6 +5,7 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
 import pyqtgraph as pg
+from enum import Enum
 
 APP_TITLE = "CBLA Visualization"
 
@@ -33,6 +34,8 @@ FONT_SIZE_SUBTITLE = 11
 MAX_SENSOR_DATA_NUM = 100
 INIT_ACTUATOR_VAL = 30
 
+Peripheral = Enum('Peripheral', 'actuator sensor')
+
 class VisualApp(QMainWindow):
     def __init__(self):
         super(VisualApp, self).__init__()
@@ -43,7 +46,7 @@ class VisualApp(QMainWindow):
         self.central_layout = QGridLayout()
         
         self.topleft = Configuration(self)
-        self.topright = SensorActuator(self)
+        self.topright = SensorActuator(parent=self)
         
         splitter1 = QSplitter(Qt.Horizontal, parent=self)
         splitter1.addWidget(self.topleft)
@@ -283,45 +286,61 @@ class SensorActuator(QWidget):
         self.init_sensor_actuator_widget()
 
     def init_sensor_actuator_widget(self):
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         
         label_sens_act = QLabel("Sensors and Actuators")
         label_sens_act.setFont(QFont(FONT_ARIAL, FONT_SIZE_TITLE, QFont.Bold))
         
         tab_widget = QTabWidget(self)
         
-        tab_physical = QWidget(tab_widget)
-        tab_virtual = VirtualBehavior(tab_widget)
+        self.tab_physical = QWidget(tab_widget)
+        self.tab_virtual = VirtualBehavior(tab_widget)
         
-        tab_widget.addTab(tab_physical, "Physical")
-        tab_widget.addTab(tab_virtual, "Virtual")
+        tab_widget.addTab(self.tab_physical, "Physical")
+        tab_widget.addTab(self.tab_virtual, "Virtual")
         
-        self.init_physical_tab(tab_physical)
-        self.init_virtual_tab(tab_virtual)
+        self.init_physical_tab()
+        self.init_virtual_tab()
         
-        layout.addRow(label_sens_act)
-        layout.addRow(tab_widget)
+        layout.addWidget(label_sens_act)
+        layout.addWidget(tab_widget)
         
         self.setLayout(layout)
 
-    def init_physical_tab(self, widget):
+    def add_sensor_actuator(self, peripheral_map):
         layout = QGridLayout()
+        print(Peripheral.actuator)
+        row = 0
+        column = 0
+        if peripheral_map is not None:
+            for n, ports in peripheral_map.items():
+                node = n
+                for p, a in ports.items():
+                    port = p
+                    num_acts = sum(t == Peripheral.actuator for t in a.values())
+                    num_sens = sum(t == Peripheral.sensor for t in a.values())
+                    for addr, type in a.items():
+                        if (type == Peripheral.actuator):
+                            act = Actuator(node, port, addr, self.tab_physical)
+                            layout.addWidget(act, row, column)
+                            column = column + 1
+                    
+                    row = row + 1
+                    column = 0
+                    for addr, type in a.items():
+                        if (type == Peripheral.sensor):
+                            sens = Sensor(node, port, addr, self.tab_physical)
+                            layout.addWidget(sens, row, column, 1, int(num_acts / num_sens))
+                            column = column + 1
+                    column = 0
         
-        sensor = Sensor(0, 0, 5, widget)
-        act1 = Actuator(0, 0, 1, widget)
-        act2 = Actuator(0, 0, 2, widget)
-        act3 = Actuator(0, 0, 3, widget)
-        act4 = Actuator(0, 0, 4, widget)
-        
-        layout.addWidget(sensor, 0, 0, 1, 4)
-        layout.addWidget(act1, 1, 0)
-        layout.addWidget(act2, 1, 2)
-        layout.addWidget(act3, 1, 3)
-        layout.addWidget(act4, 1, 4)
-        
-        widget.setLayout(layout)
+        self.tab_physical.setLayout(layout)
 
-    def init_virtual_tab(self, widget):
+    def init_physical_tab(self):
+        pass
+        
+
+    def init_virtual_tab(self):
         pass
 
 class VirtualBehavior(QWidget):
