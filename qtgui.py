@@ -95,7 +95,7 @@ class Configuration(QWidget):
             "max_training_data_num": 500,
             "cycle_time": 0.8,
             "serial_number": 141960,
-            "com_port": 'COM 7'
+            "com_port": 'COM7'
         }
         self.init_config_widget()
 
@@ -108,7 +108,7 @@ class Configuration(QWidget):
         label_connection = QLabel("Connection")
         label_connection.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
         
-        com_port = QLineEdit('COM 7')
+        com_port = QLineEdit('COM7')
         com_port.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         com_port.textEdited.connect(self.com_port_changed)
         
