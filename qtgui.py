@@ -45,19 +45,21 @@ class VisualApp(QMainWindow):
         self.central_widget = QWidget()
         self.central_layout = QGridLayout()
         
-        self.topleft = Configuration(self)
+        self.topleft = QScrollArea()
+        self.topleft.setWidget(Configuration(self))
         self.topright = SensorActuator(parent=self)
         
         splitter1 = QSplitter(Qt.Horizontal, parent=self)
         splitter1.addWidget(self.topleft)
         splitter1.addWidget(self.topright)
+        splitter1.setStretchFactor(1, 2)
         
         self.bottom = Bottom(self)
         
         splitter2 = QSplitter(Qt.Vertical, parent=self)
         splitter2.addWidget(splitter1)
         splitter2.addWidget(self.bottom)
-        splitter2.setStretchFactor(0, 5)
+        splitter2.setStretchFactor(0, 10)
         
         self.central_layout.addWidget(splitter2)
 
@@ -90,7 +92,8 @@ class Configuration(QWidget):
             "learning_rate": 0.25,
             "kga_delta": 10,
             "kga_tau": 30,
-            "max_training_data_num": 500
+            "max_training_data_num": 500,
+            "cycle_time": 0.8
         }
         self.init_config_widget()
 
@@ -192,6 +195,14 @@ class Configuration(QWidget):
         self.exploring_rate_range.setEnabled(False)
         self.exploring_reward_range.setEnabled(False)
         
+        label_execution = QLabel("Execution Parameter")
+        label_execution.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
+        
+        cycle_time = QLineEdit('0.8')
+        cycle_time.setValidator(QDoubleValidator())
+        cycle_time.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
+        cycle_time.textEdited.connect(self.cycle_time_changed)
+        
         layout.addRow(title)
         
         layout.addRow(label_learner)
@@ -215,6 +226,9 @@ class Configuration(QWidget):
         layout.addRow("KGA TAU", kga_tau)
         layout.addRow("Max Training Data Num", max_training_data_num)
         
+        layout.addRow(label_execution)
+        layout.addRow("Cycle Time", cycle_time)
+        
         self.setLayout(layout)
 
     def adapt_exploring_rate_changed(self, checkbox):
@@ -225,14 +239,14 @@ class Configuration(QWidget):
         self.config["adapt_exploring_rate"] = isAdapt
 
     def exploring_rate_range_changed(self, val):
-        valRange = val.replace("(").replace(")").split(",")
+        valRange = val.replace("(", "").replace(")", "").split(",")
         if (len(valRange) > 1):
             minVal = float(valRange[0].replace(" ", ""))
             maxVal = float(valRange[1].replace(" ", ""))
             self.config["exploring_rate_range"] = (minVal, maxVal)
 
     def exploring_reward_range_changed(self, val):
-        valRange = val.replace("(").replace(")").split(",")
+        valRange = val.replace("(", "").replace(")", "").split(",")
         if (len(valRange) > 1):
             minVal = float(valRange[0].replace(" ", ""))
             maxVal = float(valRange[1].replace(" ", ""))
@@ -280,6 +294,9 @@ class Configuration(QWidget):
     def max_training_data_num_changed(self, val):
         self.config["max_training_data_num"] = val
 
+    def cycle_time_changed(self, val):
+        self.config["cycle_time"] = val
+
 class SensorActuator(QWidget):
     def __init__(self, parent=None):
         super(SensorActuator, self).__init__(parent)
@@ -309,7 +326,7 @@ class SensorActuator(QWidget):
 
     def add_sensor_actuator(self, peripheral_map):
         layout = QGridLayout()
-        print(Peripheral.actuator)
+        
         row = 0
         column = 0
         if peripheral_map is not None:
