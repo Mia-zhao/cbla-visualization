@@ -491,13 +491,21 @@ class Bottom(QWidget):
         
         btn_layout = QHBoxLayout()
         
+        self.btn_clear = QPushButton("Clear")
+        self.btn_clear.clicked.connect(self.clear)
+        
+        self.btn_connect = QPushButton("Connect")
+        self.btn_connect.clicked.connect(self.connect)
+        
         self.btn_run = QPushButton("Run")
         self.btn_run.clicked.connect(self.run)
         
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.clicked.connect(self.cancel)
         
+        btn_layout.addWidget(self.btn_clear)
         btn_layout.addStretch(1)
+        btn_layout.addWidget(self.btn_connect)
         btn_layout.addWidget(self.btn_run)
         btn_layout.addWidget(self.btn_cancel)
         
@@ -505,6 +513,12 @@ class Bottom(QWidget):
         self.layout.addLayout(btn_layout)
         
         self.setLayout(self.layout)
+
+    def clear(self):
+        self.log.clear()
+
+    def connect(self):
+        pass
 
     def run(self):
         pass
