@@ -348,7 +348,12 @@ class SensorActuator(QWidget):
         self.setLayout(layout)
 
     def add_sensor_actuator(self, peripheral_map):
-        layout = QGridLayout()
+        layout = self.tab_physical.layout()
+        if (layout is None):
+            layout = QGridLayout()
+            self.tab_physical.setLayout(layout)
+        
+        clearLayout(layout)
         
         row = 0
         column = 0
@@ -373,8 +378,6 @@ class SensorActuator(QWidget):
                             layout.addWidget(sens, row, column, 1, int(num_acts / num_sens))
                             column = column + 1
                     column = 0
-        
-        self.tab_physical.setLayout(layout)
 
     def init_physical_tab(self):
         pass
@@ -525,3 +528,11 @@ class Bottom(QWidget):
 
     def cancel(self):
         pass
+        
+def clearLayout(layout):
+    while (layout.count() > 0):
+        child = layout.takeAt(0)
+        if (child.widget() is not None):
+            child.widget().deleteLater()
+        elif (child.layout() is not None):
+            clearLayout(child.layout())
