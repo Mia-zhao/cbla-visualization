@@ -1,11 +1,20 @@
 import sys
+
 import qtgui
 from PyQt4.QtGui import *
+from PyQt4.QtCore import *
 
-app = QApplication([])
+def main():
+    
+    app = QApplication([])
 
-win = qtgui.VisualApp()
+    win = qtgui.VisualApp()
 
-win.showMaximized()
+    win.showMaximized()  
+    
 
-sys.exit(app.exec_())
+    sys.exit(app.exec_())
+
+if __name__=='__main__':
+    main()
+
