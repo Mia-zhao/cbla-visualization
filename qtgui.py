@@ -1,5 +1,8 @@
+import datetime
 import numpy as np
 import collections
+
+import simpleTeensyComs
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
@@ -9,22 +12,13 @@ from enum import Enum
 
 APP_TITLE = "CBLA Visualization"
 
-MENU_HEADER = "Menu"
 MENU_CONFIG = "Configurations"
-MENU_SENS_ACT = "Sensors/Actuators"
-MENU_SENS = "Sensors"
-MENU_ACT = "Actuators"
-MENU_CBLA = "CBLA"
-MENU_ITEMS = [
-    (MENU_CONFIG, []),
-    (MENU_SENS_ACT, [
-        (MENU_SENS, []), 
-        (MENU_ACT, [])]),
-    (MENU_CBLA, [])]
 
-MESSAGE_READY = "Ready"
-MESSAGE_RUN = "Running"
-MESSAGE_FINISH = "Finished"
+STATUS_READY = "Ready"
+STATUS_RUN = "Running"
+STATUS_FINSH = "Finished"
+STATUS_CONNECTION_FAIL = "Disconnected"
+STAUTS_CONNECTION_SUCCSESS = "Connected"
 
 FONT_ARIAL = "Arial"
 FONT_SIZE_TITLE = 12
@@ -34,12 +28,46 @@ FONT_SIZE_SUBTITLE = 11
 MAX_SENSOR_DATA_NUM = 100
 INIT_ACTUATOR_VAL = 30
 
+TIME_FORMAT = "%Y-%m-%d-%H:%M:%S"
+
 Peripheral = Enum('Peripheral', 'actuator sensor')
 
 class VisualApp(QMainWindow):
     def __init__(self):
         super(VisualApp, self).__init__()
+        
+        self.thread = WorkThread()
+        
         self.initUI()
+        
+        self.thread.config = self.topleft.widget().config
+        
+        # message signal at log widget
+        self.connect(self.thread, SIGNAL('message(QString)'), self.message)
+        
+        # clear sensor/actuator list
+        self.connect(self.thread, SIGNAL('clear_sensor_actuator_list()'), self.clear_sensor_actuator_list)
+        
+        # update handle sensor/actuator widget
+        self.connect(self.thread, SIGNAL('add_sensor(int, int, int, int, int, int, int)'), self.add_sensor)
+        self.connect(self.thread, SIGNAL('add_actuator(int, int, int, int, int, int)'), self.add_actuator)
+        
+        # update sensor/actuator layout
+        self.connect(self.thread, SIGNAL('update_tab_physical()'), self.update_tab_physical)
+        
+        # update sensor plot
+        self.connect(self.thread, SIGNAL('update_sensor_plot(QByteArray, int)'), self.update_sensor_plot)
+        
+        # update actuator slider
+        #self.connect(self.thread, SIGNAL('update_actuator_slider(QByteArray, int)'), self.update_actuator_slider)
+        
+        # disable connect button
+        self.connect(self.thread, SIGNAL('disable_btn_connect()'), self.disable_btn_connect)
+        
+        # update main window status
+        self.connect(self.thread, SIGNAL('update_status(QString)'), self.update_status)
+        
+        self.thread.start()
 
     def initUI(self):
         self.central_widget = QWidget()
@@ -54,7 +82,7 @@ class VisualApp(QMainWindow):
         splitter1.addWidget(self.topright)
         splitter1.setStretchFactor(1, 2)
         
-        self.bottom = Bottom(self)
+        self.bottom = Bottom(self.thread, self)
         
         splitter2 = QSplitter(Qt.Vertical, parent=self)
         splitter2.addWidget(splitter1)
@@ -66,11 +94,54 @@ class VisualApp(QMainWindow):
         self.central_widget.setLayout(self.central_layout)
         self.setCentralWidget(self.central_widget)
         
-        self.statusBar().showMessage(MESSAGE_READY)
+        self.update_status(STATUS_READY)
         
         self.setWindowTitle(APP_TITLE)
         
         self.setAttribute(Qt.WA_DeleteOnClose)
+
+    def message(self, desc):
+        self.bottom.log.append(desc)
+
+    def update_status(self, status):
+        self.statusBar().showMessage(status)
+
+    def disable_btn_connect(self):
+        self.bottom.btn_connect.setEnabled(False)
+
+    def clear_sensor_actuator_list(self):
+        self.topright.actuators = []
+        self.topright.sensors = []
+
+    def update_tab_physical(self):
+        self.topright.tab_physical.setWidget(self.topright.tab_physical_content)
+
+    def add_sensor(self, node, port, addr, type, row, col, colspan):
+        layout = self.topright.tab_physical_content.layout()
+        sensor = Sensor(node, port, addr, type, self.topright.tab_physical)
+        layout.addWidget(sensor, row, col, 1, colspan)
+        
+        self.topright.sensors.append(sensor)
+
+    def add_actuator(self, node, port, addr, type, row, col):
+        layout = self.topright.tab_physical_content.layout()
+        actuator = Actuator(node, port, addr, type, self.topright.tab_physical)
+        layout.addWidget(actuator, row, col)
+        
+        self.topright.actuators.append(actuator)
+
+    def update_actuator_slider(self, byte_str, val):
+        for actuator in self.topright.actuators:
+            if (actuator.byte_str == byte_str):
+                actuator.slider.setValue(val)
+
+    def update_sensor_plot(self, byte_str, val):
+        for sensor in self.topright.sensors:
+            if (sensor.byte_str == byte_str):
+                sensor.data.append(val)
+                sensor.y[:] = sensor.data
+                if(sensor.curve is not None):
+                    sensor.curve.setData(sensor.x, sensor.y)
 
 class Configuration(QWidget):
     def __init__(self, parent=None):
@@ -95,7 +166,8 @@ class Configuration(QWidget):
             "max_training_data_num": 500,
             "cycle_time": 0.8,
             "serial_number": 141960,
-            "com_port": 'COM7'
+            "com_port": 'COM7',
+            "com_serial": 22222
         }
         self.init_config_widget()
 
@@ -324,6 +396,8 @@ class SensorActuator(QWidget):
     def __init__(self, parent=None):
         super(SensorActuator, self).__init__(parent)
         self.init_sensor_actuator_widget()
+        self.actuators = []
+        self.sensors = []
 
     def init_sensor_actuator_widget(self):
         layout = QVBoxLayout()
@@ -333,58 +407,34 @@ class SensorActuator(QWidget):
         
         tab_widget = QTabWidget(self)
         
-        self.tab_physical = QWidget(tab_widget)
-        self.tab_virtual = VirtualBehavior(tab_widget)
+        self.tab_physical = QScrollArea()
+        self.tab_physical_content = QWidget()
+        self.tab_physical_content.setLayout(QGridLayout())
+        
+        self.tab_virtual = QScrollArea(tab_widget) 
+        tab_virtual_content = VirtualBehavior()
+        self.tab_virtual.setWidget(tab_virtual_content)
         
         tab_widget.addTab(self.tab_physical, "Physical")
         tab_widget.addTab(self.tab_virtual, "Virtual")
-        
-        self.init_physical_tab()
-        self.init_virtual_tab()
         
         layout.addWidget(label_sens_act)
         layout.addWidget(tab_widget)
         
         self.setLayout(layout)
 
-    def add_sensor_actuator(self, peripheral_map):
-        layout = self.tab_physical.layout()
-        if (layout is None):
-            layout = QGridLayout()
-            self.tab_physical.setLayout(layout)
-        
-        clearLayout(layout)
-        
-        row = 0
-        column = 0
-        if peripheral_map is not None:
-            for n, ports in peripheral_map.items():
-                node = n
-                for p, a in ports.items():
-                    port = p
-                    num_acts = sum(t == Peripheral.actuator for t in a.values())
-                    num_sens = sum(t == Peripheral.sensor for t in a.values())
-                    for addr, type in a.items():
-                        if (type == Peripheral.actuator):
-                            act = Actuator(node, port, addr, self.tab_physical)
-                            layout.addWidget(act, row, column)
-                            column = column + 1
-                    
-                    row = row + 1
-                    column = 0
-                    for addr, type in a.items():
-                        if (type == Peripheral.sensor):
-                            sens = Sensor(node, port, addr, self.tab_physical)
-                            layout.addWidget(sens, row, column, 1, int(num_acts / num_sens))
-                            column = column + 1
-                    column = 0
+    def clear_list(self):
+        self.actuators = []
+        self.sensors = []
 
-    def init_physical_tab(self):
-        pass
-        
-
-    def init_virtual_tab(self):
-        pass
+    def clear_layout(self):
+        layout = self.tab_physical.widget().layout()
+        while (layout.count() > 0):
+            child = layout.takeAt(0)
+            if (child.widget() is not None):
+                child.widget().deleteLater()
+            elif (child.layout() is not None):
+                clear_layout(child.layout())
 
 class VirtualBehavior(QWidget):
     def __init__(self, parent=None):
@@ -392,12 +442,16 @@ class VirtualBehavior(QWidget):
         pass
 
 class Sensor(QWidget):
-    def __init__(self, node, port, addr, parent=None):
+    def __init__(self, node, port, addr, type, parent=None):
         super(Sensor, self).__init__(parent)
         
         self.node = node
         self.port = port
         self.addr = addr
+        self.type = type
+        
+        self.byte_str = self.addr.to_bytes(1,byteorder='big') + self.type.to_bytes(1,byteorder='big') + \
+            self.port.to_bytes(1,byteorder='big')
         
         self.curve = None
         self.x = np.linspace(0.0, 10.0, MAX_SENSOR_DATA_NUM)
@@ -439,12 +493,16 @@ class Sensor(QWidget):
         self.setLayout(layout)
 
 class Actuator(QWidget):
-    def __init__(self, node, port, addr, parent = None):
+    def __init__(self, node, port, addr, type, parent = None):
         super(Actuator, self).__init__(parent)
         
         self.node = node
         self.port = port
         self.addr = addr
+        self.type = type
+        
+        self.byte_str = self.addr.to_bytes(1,byteorder='big') + self.type.to_bytes(1,byteorder='big') + \
+            self.port.to_bytes(1,byteorder='big')
         
         self.init_actuator_widget()
 
@@ -483,14 +541,18 @@ class Actuator(QWidget):
         self.label_value.setText("{}".format(self.slider.value()))
 
 class Bottom(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, thread, parent=None):
         super(Bottom, self).__init__(parent)
+        
+        self.thread = thread
+        
         self.initUI()
 
     def initUI(self):
         self.layout = QVBoxLayout()
         
         self.log = QTextEdit()
+        self.log.setReadOnly(True)
         
         btn_layout = QHBoxLayout()
         
@@ -499,6 +561,9 @@ class Bottom(QWidget):
         
         self.btn_connect = QPushButton("Connect")
         self.btn_connect.clicked.connect(self.connect)
+        
+        self.btn_disconnect = QPushButton("Disconnect")
+        self.btn_disconnect.clicked.connect(self.disconnect)
         
         self.btn_run = QPushButton("Run")
         self.btn_run.clicked.connect(self.run)
@@ -509,6 +574,7 @@ class Bottom(QWidget):
         btn_layout.addWidget(self.btn_clear)
         btn_layout.addStretch(1)
         btn_layout.addWidget(self.btn_connect)
+        btn_layout.addWidget(self.btn_disconnect)
         btn_layout.addWidget(self.btn_run)
         btn_layout.addWidget(self.btn_cancel)
         
@@ -517,22 +583,156 @@ class Bottom(QWidget):
         
         self.setLayout(self.layout)
 
+    def disconnect(self):
+        self.thread.disconnect = True
+        self.thread.connect = False
+        self.btn_connect.setEnabled(True)
+
     def clear(self):
         self.log.clear()
 
     def connect(self):
-        pass
+        self.thread.connect = True
+        self.thread.disconnect = False
 
     def run(self):
         pass
 
     def cancel(self):
         pass
+
+class WorkThread(QThread):
+    def __init__(self, config={}):
+        super(WorkThread, self).__init__()
+        self.config = config
+        self.connect = False
+        self.disconnect = False
+
+    def __del__(self):
+        self.wait()
+
+    # continuously update sensor/actuator list
+    def run(self):
+        self.teensyComms = None
+        self.devList = None
+        while(True):
+            # sleep for 50 ms
+            self.msleep(50)
+            
+            if (self.disconnect == True):
+                time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
+                if (self.teensyComms is not None):
+                    if (self.teensyComms.is_open):
+                        self.teensyComms.close()
+                    msg = "{} Disconnected from port {}".format(time_stamp, self.config["com_port"])
+                    self.emit(SIGNAL("message(QString)"), msg)
+                    self.emit(SIGNAL("update_status(QString)"), STATUS_CONNECTION_FAIL)
+                    self.disconnect = False
+            
+            while(self.teensyComms is None):
+                # sleep for 500 ms if connect flag is False
+                while(self.connect == False):
+                    self.msleep(500)
+            
+                # get teensy serial connection
+                self.teensyComms = self.get_teensy_connection()
+                if (self.teensyComms is not None):
+                    self.show_connect_success()
+                    self.update_sensor_actuator_list()
+                self.connect = False
+            
+            if (self.connect == True):
+                if (self.teensyComms.is_open == False):
+                    self.teensyComms.open()
+                    self.show_connect_success()
+                    self.update_sensor_actuator_list()
+                self.connect = False
+            
+            # update sensor plot
+            if (self.devList is not None and self.teensyComms.is_open):
+                for i in range(0,len(self.devList)):
+                    dev = self.devList[i]
+                    port = dev.port
+                    if dev.type % 2 == 0:
+                        byte_str = dev.genByteStr()
+                        val = self.read_value(byte_str)
+                        self.emit(SIGNAL('update_sensor_plot(QByteArray, int)'), byte_str, val)
+                    #else:
+                        #byte_str = dev.genByteStr()
+                        #val = self.read_value(byte_str)
+                        #self.emit(SIGNAL('update_actuator_slider(QByteArray, int)'), byte_str, val)
+                
+    # read sensor/actuator value given peripheral byte string             
+    def read_value(self, peripheral_byte_str):
+        val = simpleTeensyComs.Read(self.teensyComms, self.config["serial_number"], self.config["com_serial"], peripheral_byte_str, 0)
+        return val           
         
-def clearLayout(layout):
-    while (layout.count() > 0):
-        child = layout.takeAt(0)
-        if (child.widget() is not None):
-            child.widget().deleteLater()
-        elif (child.layout() is not None):
-            clearLayout(child.layout())
+    def show_connect_success(self):
+        msg = "{} Connected to port {}".format(datetime.datetime.now().strftime(TIME_FORMAT), self.config["com_port"])
+        self.emit(SIGNAL('message(QString)'), msg)
+        self.emit(SIGNAL('update_status(QString)'), STAUTS_CONNECTION_SUCCSESS)
+        self.emit(SIGNAL('disable_btn_connect()'))
+
+    def update_sensor_actuator_list(self):
+        self.emit(SIGNAL('clear_sensor_actuator_list()'))
+        try:
+            numDevices = simpleTeensyComs.QueryNumDevices(self.teensyComms, self.config["serial_number"], self.config["com_serial"])
+        except ConnectionError as err:
+            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
+            desc = "{} {}".format(time_stamp, err.args[0])
+            self.emit(SIGNAL('message(QString)'), desc)
+            self.teensyComms.close()
+            return
+        
+        try:
+            self.devList = simpleTeensyComs.QueryIDs(self.teensyComms, self.config["serial_number"], self.config["com_serial"])
+        except ConnectionError as err:
+            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
+            desc = "{} {}".format(time_stamp, err.args[0])
+            self.emit(SIGNAL('message(QString)'), desc)
+            self.teensyComms.close()
+            return
+        
+        peripherals = {0:{}}
+        
+        for i in range(0,len(self.devList)):
+            dev = self.devList[i]
+            port = dev.port
+            if (port not in peripherals[0].keys()):
+                peripherals[0][port] = {}
+            peripherals[0][port][dev.address] = dev.type
+        
+        row = 0
+        col = 0
+        for n, ports in peripherals.items():
+            node = n
+            for p, a in ports.items():
+                port = p
+                num_sens = sum(t % 2 == 0 for t in a.values())
+                num_acts = len(a.values()) - num_sens
+                for addr, type in a.items():
+                    if (type % 2 != 0):
+                        self.emit(SIGNAL('add_actuator(int, int, int, int, int, int)'), node, port, addr, type, row, col)
+                        col = col + 1
+                
+                row = row + 1
+                col = 0
+                for addr, type in a.items():
+                    if (type % 2 == 0):
+                        self.emit(SIGNAL('add_sensor(int, int, int, int, int, int, int)'), node, port, addr, type, row, col, int(num_acts/num_sens))
+                        col = col + 1
+                row = row + 1
+                col = 0
+        self.emit(SIGNAL('update_tab_physical()'))
+
+    def get_teensy_connection(self):
+        teensyComms = None
+        try:
+            teensyComms = simpleTeensyComs.initializeComms(self.config["com_port"])
+        except Exception as inst:
+            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
+            desc = "{} Failed to open port {}\n{} {}".format(time_stamp, self.config["com_port"], 
+                "".ljust(len(time_stamp)), inst.args[0])
+            self.emit(SIGNAL('message(QString)'), desc)
+            self.emit(SIGNAL("update_status(QString)"), STATUS_CONNECTION_FAIL)
+        return teensyComms
