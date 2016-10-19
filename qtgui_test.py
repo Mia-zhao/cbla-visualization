@@ -12,6 +12,7 @@ def main():
 
     win.showMaximized()  
     
+    win.bottom.btn_cancel.clicked.connect(app.quit)
 
     sys.exit(app.exec_())
 

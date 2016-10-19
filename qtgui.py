@@ -569,7 +569,6 @@ class Bottom(QWidget):
         self.btn_run.clicked.connect(self.run)
         
         self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.clicked.connect(self.cancel)
         
         btn_layout.addWidget(self.btn_clear)
         btn_layout.addStretch(1)
@@ -596,9 +595,6 @@ class Bottom(QWidget):
         self.thread.disconnect = False
 
     def run(self):
-        pass
-
-    def cancel(self):
         pass
 
 class WorkThread(QThread):
