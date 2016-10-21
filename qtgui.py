@@ -1,24 +1,17 @@
-import datetime
-import numpy as np
 import collections
 
-import simpleTeensyComs
+import numpy as np
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
-
 import pyqtgraph as pg
-from enum import Enum
+
+import qthreads
 
 APP_TITLE = "CBLA Visualization"
+PLOT_TITLE = "CBLA Plots"
 
 MENU_CONFIG = "Configurations"
-
-STATUS_READY = "Ready"
-STATUS_RUN = "Running"
-STATUS_FINSH = "Finished"
-STATUS_CONNECTION_FAIL = "Disconnected"
-STAUTS_CONNECTION_SUCCSESS = "Connected"
 
 FONT_ARIAL = "Arial"
 FONT_SIZE_TITLE = 12
@@ -28,46 +21,58 @@ FONT_SIZE_SUBTITLE = 11
 MAX_SENSOR_DATA_NUM = 100
 INIT_ACTUATOR_VAL = 30
 
-TIME_FORMAT = "%Y-%m-%d-%H:%M:%S"
-
-Peripheral = Enum('Peripheral', 'actuator sensor')
 
 class VisualApp(QMainWindow):
+    ''' define pyqt signals to communicate with other threads '''
+    # signals to notify teensy connect/disconnect (emitted on button clicks)
+    connect_teensy = pyqtSignal()
+    disconnect_teensy = pyqtSignal()
+    run_cbla = pyqtSignal()
+    
     def __init__(self):
         super(VisualApp, self).__init__()
         
-        self.thread = WorkThread()
-        
+        # initialize UI
         self.initUI()
         
-        self.thread.config = self.topleft.widget().config
+        self.bgthread = qthreads.BackgroundThread(self, self.topleft.widget().config["com_port"], 
+            self.topleft.widget().config["com_serial"], self.topleft.widget().config["serial_number"])
+        
+        self.plotthread = qthreads.PlotThread(self, self.topleft.widget().config)
+        
+        self.cblathread = qthreads.CBLAThread(self, self.topleft.widget().config)
         
         # message signal at log widget
-        self.connect(self.thread, SIGNAL('message(QString)'), self.message)
+        self.bgthread.teensy_message.connect(self.message)
+        
+        # update main window status
+        self.bgthread.status.connect(self.update_status)
+        
+        # disable connect button
+        self.bgthread.disable_btn_connect.connect(self.disable_btn_connect)
+        
+        # update device list when devices are detected
+        self.bgthread.device_ready.connect(self.plotthread.update_sensor_actuator_list)
         
         # clear sensor/actuator list
-        self.connect(self.thread, SIGNAL('clear_sensor_actuator_list()'), self.clear_sensor_actuator_list)
+        self.plotthread.clear_sensor_actuator_list.connect(self.clear_sensor_actuator_list)
         
         # update handle sensor/actuator widget
-        self.connect(self.thread, SIGNAL('add_sensor(int, int, int, int, int, int, int)'), self.add_sensor)
-        self.connect(self.thread, SIGNAL('add_actuator(int, int, int, int, int, int)'), self.add_actuator)
+        self.plotthread.add_sensor.connect(self.add_sensor)
+        self.plotthread.add_actuator.connect(self.add_actuator)
         
         # update sensor/actuator layout
-        self.connect(self.thread, SIGNAL('update_tab_physical()'), self.update_tab_physical)
+        self.plotthread.update_tab_physical.connect(self.update_tab_physical)
         
         # update sensor plot
-        self.connect(self.thread, SIGNAL('update_sensor_plot(QByteArray, int)'), self.update_sensor_plot)
+        self.plotthread.update_sensor_plot.connect(self.update_sensor_plot)
         
         # update actuator slider
         #self.connect(self.thread, SIGNAL('update_actuator_slider(QByteArray, int)'), self.update_actuator_slider)
         
-        # disable connect button
-        self.connect(self.thread, SIGNAL('disable_btn_connect()'), self.disable_btn_connect)
+        self.bgthread.start()
         
-        # update main window status
-        self.connect(self.thread, SIGNAL('update_status(QString)'), self.update_status)
-        
-        self.thread.start()
+        self.plotthread.start()
 
     def initUI(self):
         self.central_widget = QWidget()
@@ -75,14 +80,14 @@ class VisualApp(QMainWindow):
         
         self.topleft = QScrollArea()
         self.topleft.setWidget(Configuration(self))
-        self.topright = SensorActuator(parent=self)
+        self.topright = SensorActuator(self)
         
         splitter1 = QSplitter(Qt.Horizontal, parent=self)
         splitter1.addWidget(self.topleft)
         splitter1.addWidget(self.topright)
         splitter1.setStretchFactor(1, 2)
         
-        self.bottom = Bottom(self.thread, self)
+        self.bottom = Bottom(self)
         
         splitter2 = QSplitter(Qt.Vertical, parent=self)
         splitter2.addWidget(splitter1)
@@ -94,7 +99,7 @@ class VisualApp(QMainWindow):
         self.central_widget.setLayout(self.central_layout)
         self.setCentralWidget(self.central_widget)
         
-        self.update_status(STATUS_READY)
+        self.update_status(qthreads.STATUS_READY)
         
         self.setWindowTitle(APP_TITLE)
         
@@ -144,8 +149,8 @@ class VisualApp(QMainWindow):
                     sensor.curve.setData(sensor.x, sensor.y)
 
 class Configuration(QWidget):
-    def __init__(self, parent=None):
-        super(Configuration, self).__init__(parent)
+    def __init__(self, main=None):
+        super(Configuration, self).__init__()
         self.config = {
             "exploring_rate": 0.1,
             "exploring_rate_range": (0.4, 0.01),
@@ -170,6 +175,7 @@ class Configuration(QWidget):
             "com_serial": 22222
         }
         self.init_config_widget()
+        self.main = main
 
     def init_config_widget(self):
         layout = QFormLayout()
@@ -393,11 +399,12 @@ class Configuration(QWidget):
         self.config["cycle_time"] = val
 
 class SensorActuator(QWidget):
-    def __init__(self, parent=None):
-        super(SensorActuator, self).__init__(parent)
+    def __init__(self, main=None):
+        super(SensorActuator, self).__init__()
         self.init_sensor_actuator_widget()
         self.actuators = []
         self.sensors = []
+        self.main = main
 
     def init_sensor_actuator_widget(self):
         layout = QVBoxLayout()
@@ -541,11 +548,9 @@ class Actuator(QWidget):
         self.label_value.setText("{}".format(self.slider.value()))
 
 class Bottom(QWidget):
-    def __init__(self, thread, parent=None):
-        super(Bottom, self).__init__(parent)
-        
-        self.thread = thread
-        
+    def __init__(self, main=None):
+        super(Bottom, self).__init__()
+        self.main = main
         self.initUI()
 
     def initUI(self):
@@ -583,152 +588,15 @@ class Bottom(QWidget):
         self.setLayout(self.layout)
 
     def disconnect(self):
-        self.thread.disconnect = True
-        self.thread.connect = False
+        self.main.disconnect_teensy.emit()
         self.btn_connect.setEnabled(True)
 
     def clear(self):
         self.log.clear()
 
     def connect(self):
-        self.thread.connect = True
-        self.thread.disconnect = False
+        self.main.connect_teensy.emit()
 
     def run(self):
-        pass
-
-class WorkThread(QThread):
-    def __init__(self, config={}):
-        super(WorkThread, self).__init__()
-        self.config = config
-        self.connect = False
-        self.disconnect = False
-
-    def __del__(self):
-        self.wait()
-
-    # continuously update sensor/actuator list
-    def run(self):
-        self.teensyComms = None
-        self.devList = None
-        while(True):
-            # sleep for 50 ms
-            self.msleep(50)
-            
-            if (self.disconnect == True):
-                time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
-                if (self.teensyComms is not None):
-                    if (self.teensyComms.is_open):
-                        self.teensyComms.close()
-                    msg = "{} Disconnected from port {}".format(time_stamp, self.config["com_port"])
-                    self.emit(SIGNAL("message(QString)"), msg)
-                    self.emit(SIGNAL("update_status(QString)"), STATUS_CONNECTION_FAIL)
-                    self.disconnect = False
-            
-            while(self.teensyComms is None):
-                # sleep for 500 ms if connect flag is False
-                while(self.connect == False):
-                    self.msleep(500)
-            
-                # get teensy serial connection
-                self.teensyComms = self.get_teensy_connection()
-                if (self.teensyComms is not None):
-                    self.show_connect_success()
-                    self.update_sensor_actuator_list()
-                self.connect = False
-            
-            if (self.connect == True):
-                if (self.teensyComms.is_open == False):
-                    self.teensyComms.open()
-                    self.show_connect_success()
-                    self.update_sensor_actuator_list()
-                self.connect = False
-            
-            # update sensor plot
-            if (self.devList is not None and self.teensyComms.is_open):
-                for i in range(0,len(self.devList)):
-                    dev = self.devList[i]
-                    port = dev.port
-                    if dev.type % 2 == 0:
-                        byte_str = dev.genByteStr()
-                        val = self.read_value(byte_str)
-                        self.emit(SIGNAL('update_sensor_plot(QByteArray, int)'), byte_str, val)
-                    #else:
-                        #byte_str = dev.genByteStr()
-                        #val = self.read_value(byte_str)
-                        #self.emit(SIGNAL('update_actuator_slider(QByteArray, int)'), byte_str, val)
-                
-    # read sensor/actuator value given peripheral byte string             
-    def read_value(self, peripheral_byte_str):
-        val = simpleTeensyComs.Read(self.teensyComms, self.config["serial_number"], self.config["com_serial"], peripheral_byte_str, 0)
-        return val           
-        
-    def show_connect_success(self):
-        msg = "{} Connected to port {}".format(datetime.datetime.now().strftime(TIME_FORMAT), self.config["com_port"])
-        self.emit(SIGNAL('message(QString)'), msg)
-        self.emit(SIGNAL('update_status(QString)'), STAUTS_CONNECTION_SUCCSESS)
-        self.emit(SIGNAL('disable_btn_connect()'))
-
-    def update_sensor_actuator_list(self):
-        self.emit(SIGNAL('clear_sensor_actuator_list()'))
-        try:
-            numDevices = simpleTeensyComs.QueryNumDevices(self.teensyComms, self.config["serial_number"], self.config["com_serial"])
-        except ConnectionError as err:
-            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
-            desc = "{} {}".format(time_stamp, err.args[0])
-            self.emit(SIGNAL('message(QString)'), desc)
-            self.teensyComms.close()
-            return
-        
-        try:
-            self.devList = simpleTeensyComs.QueryIDs(self.teensyComms, self.config["serial_number"], self.config["com_serial"])
-        except ConnectionError as err:
-            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
-            desc = "{} {}".format(time_stamp, err.args[0])
-            self.emit(SIGNAL('message(QString)'), desc)
-            self.teensyComms.close()
-            return
-        
-        peripherals = {0:{}}
-        
-        for i in range(0,len(self.devList)):
-            dev = self.devList[i]
-            port = dev.port
-            if (port not in peripherals[0].keys()):
-                peripherals[0][port] = {}
-            peripherals[0][port][dev.address] = dev.type
-        
-        row = 0
-        col = 0
-        for n, ports in peripherals.items():
-            node = n
-            for p, a in ports.items():
-                port = p
-                num_sens = sum(t % 2 == 0 for t in a.values())
-                num_acts = len(a.values()) - num_sens
-                for addr, type in a.items():
-                    if (type % 2 != 0):
-                        self.emit(SIGNAL('add_actuator(int, int, int, int, int, int)'), node, port, addr, type, row, col)
-                        col = col + 1
-                
-                row = row + 1
-                col = 0
-                for addr, type in a.items():
-                    if (type % 2 == 0):
-                        self.emit(SIGNAL('add_sensor(int, int, int, int, int, int, int)'), node, port, addr, type, row, col, int(num_acts/num_sens))
-                        col = col + 1
-                row = row + 1
-                col = 0
-        self.emit(SIGNAL('update_tab_physical()'))
-
-    def get_teensy_connection(self):
-        teensyComms = None
-        try:
-            teensyComms = simpleTeensyComs.initializeComms(self.config["com_port"])
-        except Exception as inst:
-            time_stamp = datetime.datetime.now().strftime(TIME_FORMAT)
-            desc = "{} Failed to open port {}\n{} {}".format(time_stamp, self.config["com_port"], 
-                "".ljust(len(time_stamp)), inst.args[0])
-            self.emit(SIGNAL('message(QString)'), desc)
-            self.emit(SIGNAL("update_status(QString)"), STATUS_CONNECTION_FAIL)
-        return teensyComms
+        self.btn_run.setEnabled(False)
+        self.main.run_cbla.emit()
