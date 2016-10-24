@@ -298,7 +298,7 @@ class CBLAThread(QThread):
         self.wait()
 
     def run(self):
-        global devices, queue_dict, fade_commands, x, y1, y2
+        global devices, queue_dict, fade_commands, x, y1, y2, y3
 
         # sleep 500 ms if device list is not ready
         while(devices is None):
@@ -330,12 +330,17 @@ class CBLAThread(QThread):
             self.msleep(config['cycle_time'])
             if iterNum > 0:
                 lock.acquire()
+                fade_commands = []
                 for i in range(0,len(ActsList)):
                     if (ActsList[i].genByteStr() not in devices_inactive):
-                        self.update_actuator_val.emit(ActsList[i].genByteStr(), int(actValues[i]))
-                        fade_command = (ActsList[i].genByteStr(), int(actValues[i]))
-                        fade_commands.append(fade_command)
-                        logging.debug("Command Actuator {} to Value {}".format(i, int(actValues[i])))
+                        fade_val = int(actValues[i])
+                    else:
+                        fade_val = 0
+                    self.update_actuator_val.emit(ActsList[i].genByteStr(), fade_val)
+                    fade_command = (ActsList[i].genByteStr(), fade_val)
+                    fade_commands.append(fade_command)
+                    logging.debug("Command Actuator {} to Value {}".format(i, int(actValues[i])))
+       
                 lock.release()
 
             #Sense:  Read all the sensors
@@ -364,15 +369,21 @@ class CBLAThread(QThread):
                 logging.debug("------------------------------")
                 logging.debug("increased expert number")
 
-            if (self.curves is not None and "plot_expert_number" in self.curves):
+            if (self.curves is not None and CBLAPlots.plot_expert_number in self.curves):
                 y1 = np.append(y1[1:MAX_CBLA_DATA_NUM], expert_number)
-                self.curves["plot_expert_number"].setData(x, y1)
+                self.curves[CBLAPlots.plot_expert_number].setData(x, y1)
 
-            if (self.curves is not None and "plot_prediction_error" in self.curves):
+            if (self.curves is not None and CBLAPlots.plot_prediction_error in self.curves):
                 if (reduced_mean_error is not None):
                     y2 = np.append(y2[1:MAX_CBLA_DATA_NUM], reduced_mean_error)
-                self.curves["plot_prediction_error"].setData(x, y2)
-            #lock2.release()
+                self.curves[CBLAPlots.plot_prediction_error].setData(x, y2)
+
+            if (self.curves is not None and CBLAPlots.plot_max_action_value in self.curves):
+                max_action_val = lrnr.expert.get_largest_action_value()
+                if (max_action_val is not None):
+                    y3 = np.append(y3[1:MAX_CBLA_DATA_NUM], max_action_val)
+                self.curves[CBLAPlots.plot_max_action_value].setData(x, y3)
+
             #Report the action value and the number of experts currently in the system
             #print('Current max action value is ', lrnr.expert.get_largest_action_value())
             #print('Current number of experts is', lrnr.expert.get_num_experts())

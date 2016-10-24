@@ -733,10 +733,12 @@ class Bottom(QWidget):
             self.main.addDockWidget(Qt.RightDockWidgetArea, self.main.cblathread.dock_widget)
         for plot in qthreads.cbla_plots:
             title = None
-            if (plot == "plot_expert_number"):
+            if (plot == qthreads.CBLAPlots.plot_expert_number):
                 title = "Number of Experts"
-            elif (plot == "plot_prediction_error"):
+            elif (plot == qthreads.CBLAPlots.plot_prediction_error):
                 title = "Learning Progress"
+            elif (plot == qthreads.CBLAPlots.plot_max_action_value):
+                title = "Max Action Value"
             graph = self.main.cblathread.plot_window.addPlot(title=title)
             graph.enableAutoRange('xy', True)
             self.main.cblathread.curves[plot] = graph.plot()
