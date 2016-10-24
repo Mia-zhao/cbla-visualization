@@ -53,7 +53,10 @@ config = {
 
 queue_dict = {}
 QUEUE_SIZE = 100
+
 devices = None
+devices_inactive = []
+
 fade_commands = []
 
 lock = threading.RLock()
@@ -62,7 +65,7 @@ MAX_CBLA_DATA_NUM = 50
 x = np.linspace(0.0, 50.0, MAX_CBLA_DATA_NUM)
 y1 = np.ones(MAX_CBLA_DATA_NUM, dtype=np.int)
 y2 = np.zeros(MAX_CBLA_DATA_NUM, dtype=np.float)
-
+y3 = np.zeros(MAX_CBLA_DATA_NUM, dtype=np.float)
 
 # thread debugging
 logging.basicConfig(level=logging.DEBUG, format='(%(threadName)-10s) %(message)s',)
@@ -328,10 +331,11 @@ class CBLAThread(QThread):
             if iterNum > 0:
                 lock.acquire()
                 for i in range(0,len(ActsList)):
-                    self.update_actuator_val.emit(ActsList[i].genByteStr(), int(actValues[i]))
-                    fade_command = (ActsList[i].genByteStr(), int(actValues[i]))
-                    fade_commands.append(fade_command)
-                    logging.debug("Command Actuator {} to Value {}".format(i, int(actValues[i])))
+                    if (ActsList[i].genByteStr() not in devices_inactive):
+                        self.update_actuator_val.emit(ActsList[i].genByteStr(), int(actValues[i]))
+                        fade_command = (ActsList[i].genByteStr(), int(actValues[i]))
+                        fade_commands.append(fade_command)
+                        logging.debug("Command Actuator {} to Value {}".format(i, int(actValues[i])))
                 lock.release()
 
             #Sense:  Read all the sensors

@@ -20,6 +20,9 @@ FONT_SIZE_SUBTITLE = 11
 MAX_SENSOR_DATA_NUM = 100
 INIT_ACTUATOR_VAL = 30
 
+COLOR_ACTIVE = QColor("black")
+COLOR_INACTIVE = QColor("red")
+
 class VisualApp(QMainWindow):
     ''' define pyqt signals to communicate with other threads '''
     # signals to notify teensy connect/disconnect (emitted on button clicks)
@@ -439,7 +442,7 @@ class Configuration(QWidget):
         if (plot_max_action_value and qthreads.CBLAPlots.plot_expert_number not in qthreads.cbla_plots):
             qthreads.cbla_plots.append(qthreads.CBLAPlots.plot_expert_number)
         elif (plot_max_action_value == False and qthreads.CBLAPlots.plot_expert_number in qthreads.cbla_plots):
-            qthreads.cbla_plots.remove(qthreads.CBLAPlots.plot_expert_number)
+            qthreads.cbla_plots.remove(qthreads.CBLAPlots.plot_max_action_value)
 
 class SensorActuator(QWidget):
     def __init__(self, main=None):
@@ -511,7 +514,19 @@ class Sensor(QWidget):
         self.init_sensor_widget()
 
     def init_sensor_widget(self):
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+
+        self.subwidget = QWidget()
+        sublayout = QGridLayout()
+
+        self.toggleButton = QToolButton()
+        self.toggleButton.setStyleSheet("QToolButton {border: none}")
+        self.toggleButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggleButton.setArrowType(Qt.RightArrow)
+        self.toggleButton.setText("Hide")
+        self.toggleButton.setCheckable(True)
+        self.toggleButton.setChecked(True)
+        self.toggleButton.clicked.connect(self.hide_show_sensor)
 
         label_node = QLabel("Node: {}".format(self.node))
         label_node.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
@@ -533,12 +548,29 @@ class Sensor(QWidget):
 
         self.curve = plot.plot(self.x, self.y, pen=(255,0,0))
 
-        layout.addWidget(label_node, 0, 0)
-        layout.addWidget(label_port, 0, 1)
-        layout.addWidget(label_addr, 0, 2)
-        layout.addWidget(plot, 1, 0, 1, 3)
+        layout.addWidget(self.toggleButton)
+
+        sublayout.addWidget(label_node, 0, 0)
+        sublayout.addWidget(label_port, 0, 1)
+        sublayout.addWidget(label_addr, 0, 2)
+        sublayout.addWidget(plot, 1, 0, 1, 3)
+        self.subwidget.setLayout(sublayout)
+
+        layout.addWidget(self.subwidget)
 
         self.setLayout(layout)
+
+    def hide_show_sensor(self, checked):
+        if (checked):
+            arrow = Qt.RightArrow
+            self.subwidget.show()
+            text = "Hide"
+        else:
+            arrow = Qt.DownArrow
+            self.subwidget.hide()
+            text = "Show"
+        self.toggleButton.setArrowType(arrow)
+        self.toggleButton.setText(text)
 
 class Actuator(QWidget):
     def __init__(self, node, port, addr, type, parent = None):
@@ -554,8 +586,38 @@ class Actuator(QWidget):
 
         self.init_actuator_widget()
 
+    # make the actuator widget clickable
+    # use this function to activate/inactivate actuator
+    def mousePressEvent(self, event):
+        palette = self.palette()
+        if (self.palette().color(QPalette.Foreground).name() == COLOR_ACTIVE.name()):
+            palette.setColor(self.foregroundRole(), COLOR_INACTIVE)
+        else:
+            palette.setColor(self.foregroundRole(), COLOR_ACTIVE)
+        self.setPalette(palette)
+
+        if (self.palette().color(QPalette.Foreground).name() == COLOR_ACTIVE.name()):
+            if (self.byte_str in qthreads.devices_inactive):
+                qthreads.devices_inactive.remove(self.byte_str)
+        if (self.palette().color(QPalette.Foreground).name() == COLOR_INACTIVE.name()):
+            if (self.byte_str not in qthreads.devices_inactive):
+                qthreads.devices_inactive.append(self.byte_str)
+        print(qthreads.devices_inactive)
+
     def init_actuator_widget(self):
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+
+        self.toggleButton = QToolButton()
+        self.toggleButton.setStyleSheet("QToolButton {border: none}")
+        self.toggleButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggleButton.setArrowType(Qt.RightArrow)
+        self.toggleButton.setText("Hide")
+        self.toggleButton.setCheckable(True)
+        self.toggleButton.setChecked(True)
+        self.toggleButton.clicked.connect(self.hide_show_actuator)
+
+        self.subwidget = QWidget()
+        sublayout = QGridLayout()
 
         label_node = QLabel("Node: {}".format(self.node))
         label_node.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
@@ -577,13 +639,34 @@ class Actuator(QWidget):
         self.slider.valueChanged.connect(self.slider_value_changed)
         self.slider.setTickInterval(5)
 
-        layout.addWidget(label_node, 0, 0)
-        layout.addWidget(label_port, 0, 1)
-        layout.addWidget(label_addr, 0, 2)
-        layout.addWidget(self.label_value, 1, 0)
-        layout.addWidget(self.slider, 1, 1, 1, 3)
+        layout.addWidget(self.toggleButton)
+
+        sublayout.addWidget(label_node, 0, 0)
+        sublayout.addWidget(label_port, 0, 1)
+        sublayout.addWidget(label_addr, 0, 2)
+        sublayout.addWidget(self.label_value, 1, 0)
+        sublayout.addWidget(self.slider, 1, 1, 1, 3)
+        self.subwidget.setLayout(sublayout)
+
+        layout.addWidget(self.subwidget)
 
         self.setLayout(layout)
+
+        default_palette = self.palette()
+        default_palette.setColor(self.foregroundRole(), COLOR_ACTIVE)
+        self.setPalette(default_palette)
+
+    def hide_show_actuator(self, checked):
+        if (checked):
+            arrow = Qt.RightArrow
+            self.subwidget.show()
+            text = "Hide"
+        else:
+            arrow = Qt.DownArrow
+            self.subwidget.hide()
+            text = "Show"
+        self.toggleButton.setArrowType(arrow)
+        self.toggleButton.setText(text)
 
     def slider_value_changed(self):
         self.label_value.setText("{}".format(self.slider.value()))
