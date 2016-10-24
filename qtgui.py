@@ -79,17 +79,29 @@ class VisualApp(QMainWindow):
 
         self.topleft = QScrollArea()
         self.topleft.setWidget(Configuration(self))
+        self.topleft.setMinimumWidth(self.topleft.widget().sizeHint().width() + 50)
+
         self.topright = SensorActuator(self)
 
-        splitter1 = QSplitter(Qt.Horizontal, parent=self)
-        splitter1.addWidget(self.topleft)
-        splitter1.addWidget(self.topright)
-        splitter1.setStretchFactor(1, 2)
+        self.splitter1 = QSplitter(Qt.Horizontal, parent=self)
+        self.splitter1.addWidget(self.topleft)
+        self.splitter1.addWidget(self.topright)
+        self.splitter1.setStretchFactor(1, 2)
+        
+        handle = self.splitter1.handle(1)
+        button_splitter = QToolButton(handle)
+        button_splitter.setArrowType(Qt.LeftArrow)
+        button_splitter.clicked.connect(self.handle_splitter)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(button_splitter)
+        handle.setLayout(layout)
 
         self.bottom = Bottom(self)
 
         splitter2 = QSplitter(Qt.Vertical, parent=self)
-        splitter2.addWidget(splitter1)
+        splitter2.addWidget(self.splitter1)
         splitter2.addWidget(self.bottom)
         splitter2.setStretchFactor(0, 10)
 
@@ -104,22 +116,35 @@ class VisualApp(QMainWindow):
 
         self.setAttribute(Qt.WA_DeleteOnClose)
 
+    # collapse/expand configuration panel
+    def handle_splitter(self):
+        if (not all(self.splitter1.sizes())):
+            self.splitter1.setSizes([1, 1])
+        else:
+            self.splitter1.setSizes([0, 1])
+
+    # adding log message to log text box
     def message(self, desc):
         self.bottom.log.append(desc)
 
+    # update status at status bar
     def update_status(self, status):
         self.statusBar().showMessage(status)
 
+    # disable connect button
     def disable_btn_connect(self):
         self.bottom.btn_connect.setEnabled(False)
 
+    # clear all actuators and sensors
     def clear_sensor_actuator_list(self):
         self.topright.actuators = []
         self.topright.sensors = []
 
+    # update actuator/sensor tab
     def update_tab_physical(self):
         self.topright.tab_physical.setWidget(self.topright.tab_physical_content)
 
+    # add sensor to layout
     def add_sensor(self, node, port, addr, type, row, col, colspan):
         layout = self.topright.tab_physical_content.layout()
         sensor = Sensor(node, port, addr, type, self.topright.tab_physical)
@@ -127,6 +152,7 @@ class VisualApp(QMainWindow):
 
         self.topright.sensors.append(sensor)
 
+    # add actuator to layout
     def add_actuator(self, node, port, addr, type, row, col):
         layout = self.topright.tab_physical_content.layout()
         actuator = Actuator(node, port, addr, type, self.topright.tab_physical)
@@ -134,11 +160,13 @@ class VisualApp(QMainWindow):
 
         self.topright.actuators.append(actuator)
 
+    # update value of actuator slider
     def update_actuator_slider(self, byte_str, val):
         for actuator in self.topright.actuators:
             if (actuator.byte_str == byte_str):
                 actuator.slider.setValue(val)
 
+    # update value of sensor plot
     def update_sensor_plot(self, byte_str, val):
         for sensor in self.topright.sensors:
             if (sensor.byte_str == byte_str):
@@ -169,8 +197,8 @@ class Configuration(QWidget):
             'kga_tau': 30,
             'max_training_data_num': 500,
             'cycle_time': 100,
-            'serial_number': 141960,
-            'com_port': 'COM7',
+            'serial_number': 129168,
+            'com_port': 'COM6',
             'com_serial': 22222
         }
         self.plots = ["plot_expert_number", "plot_prediction_error"]
@@ -641,8 +669,12 @@ class Bottom(QWidget):
         self.main.run_cbla.emit()
 
         self.main.cblathread.plots = self.main.topleft.widget().plots
-        self.main.cblathread.plot_window = pg.GraphicsWindow(title="CBLA Plots")
+        self.main.cblathread.dock_widget = QDockWidget("CBLA Plots")
         self.main.cblathread.curves = {}
+        if (len(self.main.topleft.widget().plots) > 0):
+            self.main.cblathread.plot_window = pg.GraphicsWindow(title="CBLA Plots")
+            self.main.cblathread.dock_widget.setWidget(self.main.cblathread.plot_window)
+            self.main.addDockWidget(Qt.RightDockWidgetArea, self.main.cblathread.dock_widget)
         for plot in self.main.topleft.widget().plots:
             title = None
             if (plot == "plot_expert_number"):
