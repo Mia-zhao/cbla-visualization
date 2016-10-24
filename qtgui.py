@@ -1,12 +1,11 @@
 import collections
-
 import numpy as np
-
-from PyQt4.QtGui import *
-from PyQt4.QtCore import *
 import pyqtgraph as pg
 
 import qthreads
+
+from PyQt4.QtGui import *
+from PyQt4.QtCore import *
 
 APP_TITLE = "CBLA Visualization"
 PLOT_TITLE = "CBLA Plots"
@@ -34,12 +33,11 @@ class VisualApp(QMainWindow):
         # initialize UI
         self.initUI()
 
-        self.bgthread = qthreads.BackgroundThread(self, self.topleft.widget().config['com_port'], 
-            self.topleft.widget().config['com_serial'], self.topleft.widget().config['serial_number'])
+        self.bgthread = qthreads.BackgroundThread(self)
 
-        self.sensorPlot = qthreads.SensorPlotThread(self, self.topleft.widget().config)
+        self.sensorPlot = qthreads.SensorPlotThread(self)
 
-        self.cblathread = qthreads.CBLAThread(self, self.topleft.widget().config)
+        self.cblathread = qthreads.CBLAThread(self)
 
         # message signal at log widget
         self.bgthread.teensy_message.connect(self.message)
@@ -178,30 +176,6 @@ class VisualApp(QMainWindow):
 class Configuration(QWidget):
     def __init__(self, main=None):
         super(Configuration, self).__init__()
-        self.config = {
-            'exploring_rate': 0.1,
-            'exploring_rate_range': (0.4, 0.01),
-            'exploring_reward_range': (-0.03, 0.004),
-            'adapt_exploring_rate': False,
-            'reward_smoothing': 1,
-            'split_threshold': 40,
-            'split_threshold_growth_rate': 1.0,
-            'split_lock_count_threshold': 1,
-            'split_quality_threshold': 0.0,
-            'split_quality_decay': 1.0,
-            'mean_error_threshold': 0.0,
-            'mean_error': 1.0,
-            'action_value': 0.0,
-            'learning_rate': 0.25,
-            'kga_delta': 10,
-            'kga_tau': 30,
-            'max_training_data_num': 500,
-            'cycle_time': 100,
-            'serial_number': 129168,
-            'com_port': 'COM6',
-            'com_serial': 22222
-        }
-        self.plots = ["plot_expert_number", "plot_prediction_error"]
         self.init_config_widget()
         self.main = main
 
@@ -214,99 +188,99 @@ class Configuration(QWidget):
         label_connection = QLabel("Connection")
         label_connection.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
 
-        com_port = QLineEdit("COM7")
+        com_port = QLineEdit(str(qthreads.config['com_port']))
         com_port.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         com_port.textEdited.connect(self.com_port_changed)
 
-        serial_number = QLineEdit("141960")
+        serial_number = QLineEdit(str(qthreads.config['serial_number']))
         serial_number.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         serial_number.textEdited.connect(self.serial_number_changed)
 
         label_learner = QLabel("Learner Configuration")
         label_learner.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
 
-        exploring_rate = QLineEdit("0.3")
+        exploring_rate = QLineEdit(str(qthreads.config['exploring_rate']))
         exploring_rate.setValidator(QDoubleValidator())
         exploring_rate.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         exploring_rate.textEdited.connect(self.exploring_rate_changed)
 
-        self.adapt_exploring_rate = QCheckBox("Adapt Exploring Rate")
+        self.adapt_exploring_rate = QCheckBox(str(qthreads.config['adapt_exploring_rate']))
         self.adapt_exploring_rate.setChecked(False)
         self.adapt_exploring_rate.stateChanged.connect(lambda:self.adapt_exploring_rate_changed(self.adapt_exploring_rate))
         self.adapt_exploring_rate.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
 
-        self.exploring_rate_range = QLineEdit("(0.4, 0.01)")
+        self.exploring_rate_range = QLineEdit(str(qthreads.config['exploring_rate_range']))
         self.exploring_rate_range.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         self.exploring_rate_range.textEdited.connect(self.exploring_rate_range_changed)
 
-        self.exploring_reward_range = QLineEdit("(-0.03, 0.004)")
+        self.exploring_reward_range = QLineEdit(str(qthreads.config['exploring_reward_range']))
         self.exploring_reward_range.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         self.exploring_reward_range.textEdited.connect(self.exploring_reward_range_changed)
 
         label_expert = QLabel("Expert Configuration")
         label_expert.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
 
-        reward_smoothing = QLineEdit("1")
+        reward_smoothing = QLineEdit(str(qthreads.config['reward_smoothing']))
         reward_smoothing.setValidator(QDoubleValidator())
         reward_smoothing.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         reward_smoothing.textEdited.connect(self.reward_smoothing_changed)
 
-        split_threshold = QLineEdit("40")
+        split_threshold = QLineEdit(str(qthreads.config['split_threshold']))
         split_threshold.setValidator(QDoubleValidator())
         split_threshold.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         split_threshold.textEdited.connect(self.split_threshold_changed)
 
-        split_threshold_growth_rate = QLineEdit("1")
+        split_threshold_growth_rate = QLineEdit(str(qthreads.config['split_threshold_growth_rate']))
         split_threshold_growth_rate.setValidator(QDoubleValidator())
         split_threshold_growth_rate.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         split_threshold_growth_rate.textEdited.connect(self.split_threshold_growth_rate_changed)
 
-        split_lock_count_threshold = QLineEdit("1")
+        split_lock_count_threshold = QLineEdit(str(qthreads.config['split_lock_count_threshold']))
         split_lock_count_threshold.setValidator(QDoubleValidator())
         split_lock_count_threshold.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         split_lock_count_threshold.textEdited.connect(self.split_lock_count_threshold_changed)
 
-        split_quality_threshold = QLineEdit("0")
+        split_quality_threshold = QLineEdit(str(qthreads.config['split_quality_threshold']))
         split_quality_threshold.setValidator(QDoubleValidator())
         split_quality_threshold.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         split_quality_threshold.textEdited.connect(self.split_quality_threshold_changed)
 
-        split_quality_decay = QLineEdit("1")
+        split_quality_decay = QLineEdit(str(qthreads.config['split_quality_decay']))
         split_quality_decay.setValidator(QDoubleValidator())
         split_quality_decay.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         split_quality_decay.textEdited.connect(self.split_quality_decay_changed)
 
-        mean_error_threshold = QLineEdit("0")
+        mean_error_threshold = QLineEdit(str(qthreads.config['mean_error_threshold']))
         mean_error_threshold.setValidator(QDoubleValidator())
         mean_error_threshold.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         mean_error_threshold.textEdited.connect(self.mean_error_threshold_changed)
 
-        mean_error = QLineEdit("1")
+        mean_error = QLineEdit(str(qthreads.config['mean_error']))
         mean_error.setValidator(QDoubleValidator())
         mean_error.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         mean_error.textEdited.connect(self.mean_error_changed)
 
-        action_value = QLineEdit("0")
+        action_value = QLineEdit(str(qthreads.config['action_value']))
         action_value.setValidator(QDoubleValidator())
         action_value.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         action_value.textEdited.connect(self.action_value_changed)
 
-        learning_rate = QLineEdit("0.25")
+        learning_rate = QLineEdit(str(qthreads.config['learning_rate']))
         learning_rate.setValidator(QDoubleValidator())
         learning_rate.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         learning_rate.textEdited.connect(self.learning_rate_changed)
 
-        kga_delta = QLineEdit("10")
+        kga_delta = QLineEdit(str(qthreads.config['kga_delta']))
         kga_delta.setValidator(QDoubleValidator())
         kga_delta.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         kga_delta.textEdited.connect(self.kga_delta_changed)
 
-        kga_tau = QLineEdit("30")
+        kga_tau = QLineEdit(str(qthreads.config['kga_tau']))
         kga_tau.setValidator(QDoubleValidator())
         kga_tau.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         kga_tau.textEdited.connect(self.kga_tau_changed)
 
-        max_training_data_num = QLineEdit("500")
+        max_training_data_num = QLineEdit(str(qthreads.config['max_training_data_num']))
         max_training_data_num.setValidator(QDoubleValidator())
         max_training_data_num.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         max_training_data_num.textEdited.connect(self.max_training_data_num_changed)
@@ -317,7 +291,7 @@ class Configuration(QWidget):
         label_execution = QLabel("Execution Parameter")
         label_execution.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
 
-        cycle_time = QLineEdit("100")
+        cycle_time = QLineEdit(str(qthreads.config['cycle_time']))
         cycle_time.setValidator(QDoubleValidator())
         cycle_time.setFont(QFont(FONT_ARIAL, FONT_SIZE_CONFIG))
         cycle_time.textEdited.connect(self.cycle_time_changed)
@@ -326,15 +300,15 @@ class Configuration(QWidget):
         label_cbla_plot.setFont(QFont(FONT_ARIAL, FONT_SIZE_SUBTITLE, QFont.Bold))
 
         plot_prediction_error = QCheckBox("Learning Progress")
-        plot_prediction_error.setChecked(True)
+        plot_prediction_error.setChecked(qthreads.CBLAPlots.plot_prediction_error in qthreads.cbla_plots)
         plot_prediction_error.stateChanged.connect(lambda:self.plot_prediction_error_changed(plot_prediction_error))
 
         plot_expert_number = QCheckBox("Expert Number")
-        plot_expert_number.setChecked(True)
+        plot_expert_number.setChecked(qthreads.CBLAPlots.plot_expert_number in qthreads.cbla_plots)
         plot_expert_number.stateChanged.connect(lambda:self.plot_expert_number_changed(plot_expert_number))
         
         plot_max_action_value = QCheckBox("Max Action Value")
-        plot_max_action_value.setChecked(True)
+        plot_max_action_value.setChecked(qthreads.CBLAPlots.plot_max_action_value in qthreads.cbla_plots)
         plot_max_action_value.stateChanged.connect(lambda:self.plot_max_action_value_changed(plot_max_action_value))
 
         layout.addRow(title)
@@ -375,97 +349,97 @@ class Configuration(QWidget):
         self.setLayout(layout)
 
     def com_port_changed(self, val):
-        self.config['com_port'] = val
+        qthreads.config['com_port'] = val
 
     def serial_number_changed(self, val):
-        self.config['serial_number'] = val
+        qthreads.config['serial_number'] = val
 
     def adapt_exploring_rate_changed(self, checkbox):
         isAdapt = checkbox.isChecked()
         self.exploring_rate_range.setEnabled(isAdapt)
         self.exploring_reward_range.setEnabled(isAdapt)
 
-        self.config['adapt_exploring_rate'] = isAdapt
+        qthreads.config['adapt_exploring_rate'] = isAdapt
 
     def exploring_rate_range_changed(self, val):
         valRange = val.replace("(", "").replace(")", "").split(",")
         if (len(valRange) > 1):
             minVal = float(valRange[0].replace(" ", ""))
             maxVal = float(valRange[1].replace(" ", ""))
-            self.config['exploring_rate_range'] = (minVal, maxVal)
+            qthreads.config['exploring_rate_range'] = (minVal, maxVal)
 
     def exploring_reward_range_changed(self, val):
         valRange = val.replace("(", "").replace(")", "").split(",")
         if (len(valRange) > 1):
             minVal = float(valRange[0].replace(" ", ""))
             maxVal = float(valRange[1].replace(" ", ""))
-            self.config['exploring_reward_range'] = (minVal, maxVal)
+            qthreads.config['exploring_reward_range'] = (minVal, maxVal)
 
     def exploring_rate_changed(self, val):
-        self.config['exploring_rate'] = val
+        qthreads.config['exploring_rate'] = val
 
     def reward_smoothing_changed(self, val):
-        self.config['reward_smoothing'] = val
+        qthreads.config['reward_smoothing'] = val
 
     def split_threshold_changed(self, val):
-        self.config['split_threshold'] = val
+        qthreads.config['split_threshold'] = val
 
     def split_threshold_growth_rate_changed(self, val):
-        self.config['split_threshold_growth_rate'] = val
+        qthreads.config['split_threshold_growth_rate'] = val
 
     def split_quality_threshold_changed(self, val):
-        self.config['split_quality_threshold'] = val
+        qthreads.config['split_quality_threshold'] = val
 
     def split_lock_count_threshold_changed(self, val):
-        self.config['split_lock_count_threshold'] = val
+        qthreads.config['split_lock_count_threshold'] = val
 
     def split_quality_decay_changed(self, val):
-        self.config['split_quality_decay'] = val
+        qthreads.config['split_quality_decay'] = val
 
     def mean_error_threshold_changed(self, val):
-        self.config['mean_error_threshold'] = val
+        qthreads.config['mean_error_threshold'] = val
 
     def mean_error_changed(self, val):
-        self.config['mean_error'] = val
+        qthreads.config['mean_error'] = val
 
     def action_value_changed(self, val):
-        self.config['action_value'] = val
+        qthreads.config['action_value'] = val
 
     def learning_rate_changed(self, val):
-        self.config['learning_rate'] = val
+        qthreads.config['learning_rate'] = val
 
     def kga_delta_changed(self, val):
-        self.config['kga_delta'] = val
+        qthreads.config['kga_delta'] = val
 
     def kga_tau_changed(self, val):
-        self.config['kga_tau'] = val
+        qthreads.config['kga_tau'] = val
 
     def max_training_data_num_changed(self, val):
-        self.config['max_training_data_num'] = val
+        qthreads.config['max_training_data_num'] = val
 
     def cycle_time_changed(self, val):
-        self.config['cycle_time'] = val
+        qthreads.config['cycle_time'] = val
 
     def plot_prediction_error_changed(self, checkbox):
         plot_prediction_error = checkbox.isChecked()
-        if (plot_prediction_error and "plot_prediction_error" not in self.plots):
-            self.plots.append("plot_prediction_error")
-        elif (plot_prediction_error == False and "plot_prediction_error" in self.plots):
-            self.plots.remove("plot_prediction_error")
+        if (plot_prediction_error and qthreads.CBLAPlots.plot_prediction_error not in qthreads.cbla_plots):
+            qthreads.cbla_plots.append(qthreads.CBLAPlots.plot_prediction_error)
+        elif (plot_prediction_error == False and qthreads.CBLAPlots.plot_prediction_error in qthreads.cbla_plots):
+            qthreads.cbla_plots.remove(qthreads.CBLAPlots.plot_prediction_error)
 
     def plot_expert_number_changed(self, checkbox):
         plot_expert_number = checkbox.isChecked()
-        if (plot_expert_number and "plot_expert_number" not in self.plots):
-            self.plots.append("plot_expert_number")
-        elif (plot_expert_number == False and "plot_expert_number" in self.plots):
-            self.plots.remove("plot_expert_number")
+        if (plot_expert_number and qthreads.CBLAPlots.plot_expert_number not in qthreads.cbla_plots):
+            qthreads.cbla_plots.append(qthreads.CBLAPlots.plot_expert_number)
+        elif (plot_expert_number == False and qthreads.CBLAPlots.plot_expert_number in qthreads.cbla_plots):
+            qthreads.cbla_plots.remove(qthreads.CBLAPlots.plot_expert_number)
 
     def plot_max_action_value_changed(self, checkbox):
         plot_max_action_value = checkbox.isChecked()
-        if (plot_max_action_value and "plot_max_action_value" not in self.plots):
-            self.plots.append("plot_max_action_value")
-        elif (plot_max_action_value == False and "plot_max_action_value" in self.plots):
-            self.plots.remove("plot_max_action_value")
+        if (plot_max_action_value and qthreads.CBLAPlots.plot_expert_number not in qthreads.cbla_plots):
+            qthreads.cbla_plots.append(qthreads.CBLAPlots.plot_expert_number)
+        elif (plot_max_action_value == False and qthreads.CBLAPlots.plot_expert_number in qthreads.cbla_plots):
+            qthreads.cbla_plots.remove(qthreads.CBLAPlots.plot_expert_number)
 
 class SensorActuator(QWidget):
     def __init__(self, main=None):
@@ -665,14 +639,15 @@ class Bottom(QWidget):
         self.main.connect_teensy.emit()
 
     def run(self):
+        print("is active: {}".format(self.main.cblathread.isRunning()))
         self.btn_run.setEnabled(False)
         self.main.run_cbla.emit()
 
         self.main.cblathread.plots = self.main.topleft.widget().plots
-        self.main.cblathread.dock_widget = QDockWidget("CBLA Plots")
+        self.main.cblathread.dock_widget = QDockWidget(PLOT_TITLE)
         self.main.cblathread.curves = {}
         if (len(self.main.topleft.widget().plots) > 0):
-            self.main.cblathread.plot_window = pg.GraphicsWindow(title="CBLA Plots")
+            self.main.cblathread.plot_window = pg.GraphicsWindow()
             self.main.cblathread.dock_widget.setWidget(self.main.cblathread.plot_window)
             self.main.addDockWidget(Qt.RightDockWidgetArea, self.main.cblathread.dock_widget)
         for plot in self.main.topleft.widget().plots:

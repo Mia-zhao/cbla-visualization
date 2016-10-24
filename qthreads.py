@@ -1,18 +1,16 @@
-import datetime
 import collections
-
+import datetime
+import logging
 import numpy as np
-
-import threading
-
-from PyQt4.QtCore import *
 import pyqtgraph as pg
-
-from cbla_learner import Learner
+import threading
 
 import simpleTeensyComs
 
-import logging
+from enum import Enum
+from PyQt4.QtCore import *
+
+from cbla_learner import Learner
 
 STATUS_READY = "Ready"
 STATUS_RUN = "Running"
@@ -21,6 +19,37 @@ STATUS_CONNECTION_FAIL = "Disconnected"
 STATUS_CONNECTION_SUCCESS = "Connected"
 
 TIME_FORMAT = "%Y-%m-%d-%H:%M:%S"
+
+''' Enum object for types of plots of CBLA '''
+class CBLAPlots(Enum):
+    plot_expert_number = 1
+    plot_prediction_error = 2
+    plot_max_action_value = 3
+cbla_plots = [CBLAPlots.plot_expert_number, CBLAPlots.plot_prediction_error]
+
+config = {
+            'exploring_rate': 0.1,
+            'exploring_rate_range': (0.4, 0.01),
+            'exploring_reward_range': (-0.03, 0.004),
+            'adapt_exploring_rate': False,
+            'reward_smoothing': 1,
+            'split_threshold': 40,
+            'split_threshold_growth_rate': 1.0,
+            'split_lock_count_threshold': 1,
+            'split_quality_threshold': 0.0,
+            'split_quality_decay': 1.0,
+            'mean_error_threshold': 0.0,
+            'mean_error': 1.0,
+            'action_value': 0.0,
+            'learning_rate': 0.25,
+            'kga_delta': 10,
+            'kga_tau': 30,
+            'max_training_data_num': 500,
+            'cycle_time': 100,
+            'serial_number': 129168,
+            'com_port': 'COM6',
+            'com_serial': 22222
+        }
 
 queue_dict = {}
 QUEUE_SIZE = 100
@@ -44,9 +73,9 @@ class DataObject(object):
         self.byte_str = byte_str
         self.val = val
 
+# TO DOs
 ''' represent CBLA internal states '''
 #class CBLAStates(object):
-    
 
 ''' 
     thread is started on connect to Teensy
@@ -59,11 +88,9 @@ class BackgroundThread(QThread):
     device_ready = pyqtSignal()
     disable_btn_connect = pyqtSignal()
 
-    def __init__(self, main, com_port, com_serial, teensy_serial):
+    def __init__(self, main):
         super(BackgroundThread, self).__init__()
-        self.com_port = com_port
-        self.com_serial = com_serial
-        self.teensy_serial = teensy_serial
+
         self.teensyComms = None
 
         main.connect_teensy.connect(self.connect_to_teensy)
@@ -75,6 +102,9 @@ class BackgroundThread(QThread):
     @pyqtSlot()
     def connect_to_teensy(self):
         logging.debug("Connecting Teensy")
+        self.com_port = config['com_port']
+        self.com_serial = config['com_serial']
+        self.teensy_serial = config['serial_number']
         if (self.teensyComms is None):
             try:
                 self.teensyComms = simpleTeensyComs.initializeComms(self.com_port)
@@ -194,9 +224,8 @@ class SensorPlotThread(QThread):
     update_sensor_plot = pyqtSignal(bytes, int)
     
     # main should be the main GUI
-    def __init__(self, main, config={}):
+    def __init__(self, main):
         super(SensorPlotThread, self).__init__()
-        self.config = config
 
     def __del__(self):
         self.wait()
@@ -257,9 +286,8 @@ class SensorPlotThread(QThread):
 class CBLAThread(QThread):
     update_actuator_val = pyqtSignal(bytes, int)
 
-    def __init__(self, main, config={}):
+    def __init__(self, main):
         super(CBLAThread, self).__init__()
-        self.config = config
 
         main.run_cbla.connect(self.start)
 
@@ -291,12 +319,12 @@ class CBLAThread(QThread):
                 ActsList.append(devices[i])
                 actValues.append(0)
 
-        lrnr = Learner(tuple([0]*numSens),tuple([0]*numActs), **self.config)
+        lrnr = Learner(tuple([0]*numSens),tuple([0]*numActs), **config)
 
         iterNum = 0
         expert_number = 1
         while (True):
-            self.msleep(self.config['cycle_time'])
+            self.msleep(config['cycle_time'])
             if iterNum > 0:
                 lock.acquire()
                 for i in range(0,len(ActsList)):
