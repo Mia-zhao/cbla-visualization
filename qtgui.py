@@ -722,18 +722,16 @@ class Bottom(QWidget):
         self.main.connect_teensy.emit()
 
     def run(self):
-        print("is active: {}".format(self.main.cblathread.isRunning()))
         self.btn_run.setEnabled(False)
         self.main.run_cbla.emit()
 
-        self.main.cblathread.plots = self.main.topleft.widget().plots
         self.main.cblathread.dock_widget = QDockWidget(PLOT_TITLE)
         self.main.cblathread.curves = {}
-        if (len(self.main.topleft.widget().plots) > 0):
+        if (len(qthreads.cbla_plots) > 0):
             self.main.cblathread.plot_window = pg.GraphicsWindow()
             self.main.cblathread.dock_widget.setWidget(self.main.cblathread.plot_window)
             self.main.addDockWidget(Qt.RightDockWidgetArea, self.main.cblathread.dock_widget)
-        for plot in self.main.topleft.widget().plots:
+        for plot in qthreads.cbla_plots:
             title = None
             if (plot == "plot_expert_number"):
                 title = "Number of Experts"

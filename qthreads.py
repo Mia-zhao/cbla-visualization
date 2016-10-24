@@ -46,8 +46,8 @@ config = {
             'kga_tau': 30,
             'max_training_data_num': 500,
             'cycle_time': 100,
-            'serial_number': 129168,
-            'com_port': 'COM6',
+            'serial_number': 141960,
+            'com_port': 'COM7',
             'com_serial': 22222
         }
 
